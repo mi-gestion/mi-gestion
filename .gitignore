@@ -1,0 +1,13 @@
+# Dependencias
+node_modules/
+dist/
+
+# Variables de entorno (Credenciales de Firebase)
+.env
+.env.local
+.env.*.local
+
+# Logs y caché
+npm-debug.log*
+.eslintcache
+.vite

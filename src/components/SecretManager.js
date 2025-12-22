@@ -1,0 +1,54 @@
+import { CryptoManager } from "../utils/crypto.js";
+import { db } from "../services/firebase.js";
+import {
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  where,
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+export class SecretManager {
+  constructor(user, userKey) {
+    this.user = user;
+    this.userKey = userKey;
+  }
+
+  async saveSecret(title, plainText) {
+    // Encriptamos antes de que salga del navegador
+    const encryptedContent = await CryptoManager.encrypt(
+      plainText,
+      this.userKey
+    );
+
+    await addDoc(collection(db, "secrets"), {
+      uid: this.user.uid,
+      title: title,
+      content: encryptedContent, // Datos ilegibles para Google
+      createdAt: new Date(),
+    });
+  }
+
+  render() {
+    const section = document.createElement("section");
+    section.className =
+      "max-w-2xl mx-auto mt-10 p-6 bg-white rounded-xl shadow-md";
+    section.innerHTML = `
+            <h3 class="text-lg font-bold mb-4">Nueva Gestión Encriptada</h3>
+            <input id="secret-title" type="text" placeholder="Título" class="w-full mb-3 p-2 border rounded">
+            <textarea id="secret-content" placeholder="Contenido sensible..." class="w-full p-2 border rounded h-32"></textarea>
+            <button id="save-btn" class="mt-3 bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700">
+                Guardar con E2EE
+            </button>
+        `;
+
+    section.querySelector("#save-btn").addEventListener("click", async () => {
+      const title = section.querySelector("#secret-title").value;
+      const content = section.querySelector("#secret-content").value;
+      await this.saveSecret(title, content);
+      alert("¡Guardado de forma segura!");
+    });
+
+    return section;
+  }
+}
