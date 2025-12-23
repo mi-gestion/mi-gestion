@@ -97,17 +97,35 @@ export class PasswordElement extends BaseInput {
   constructor() {
     super("password", "🔑", "Sensible");
   }
+
   renderEditor(c, v = "", ctx = "form") {
     const cls =
       ctx === "table"
         ? "w-full p-1 border rounded text-xs bg-gray-50"
         : "w-full p-2 border rounded bg-gray-50";
-    return this.renderInContext(
-      c,
-      `<input type="password" class="${cls}" value="${v}">`,
-      ctx
-    );
+
+    // TRUCO ANTI-AUTOFILL DE GOOGLE/LASTPASS:
+    // 1. autocomplete="new-password": Indica que no es un login.
+    // 2. readonly: El navegador ignora campos de solo lectura al cargar.
+    // 3. onfocus: Quitamos el readonly cuando el usuario entra a escribir.
+    // 4. name: Random para romper la asociación con credenciales guardadas.
+    const randomName = "safe_field_" + Math.random().toString(36).substring(7);
+
+    const inputHtml = `
+            <input type="password" 
+                class="${cls}" 
+                value="${v}" 
+                autocomplete="new-password" 
+                name="${randomName}"
+                id="${randomName}"
+                readonly 
+                onfocus="this.removeAttribute('readonly');"
+            >
+        `;
+
+    return this.renderInContext(c, inputHtml, ctx);
   }
+
   renderPrint(c, v, ctx) {
     return ctx === "table"
       ? "***"
