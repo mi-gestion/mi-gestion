@@ -94,7 +94,10 @@ async function logActivity(action, details) {
 
 async function fetchData() {
   if (!currentUser) return;
-
+  console.log(
+    "📡 [Firebase] Cargando documentos y plantillas para:",
+    currentUser.email
+  );
   try {
     // 1. Cargar Documentos (Secrets) SOLO del usuario actual
     // Nota: Si la consola muestra error de "requires an index", sigue el enlace que te da.
@@ -117,7 +120,9 @@ async function fetchData() {
       id: doc.id,
       ...doc.data(),
     }));
-
+    console.log(
+      `✅ [Data] Carga completa: ${allSecrets.length} documentos, ${allTemplates.length} plantillas.`
+    );
     renderDashboard();
   } catch (error) {
     console.error("Error cargando datos:", error);
@@ -471,6 +476,7 @@ async function handleVaultToggle() {
 }
 
 async function handleSetupVault(phrase) {
+  console.log("🔓 [Vault] Intentando abrir la bóveda con frase maestra...");
   try {
     const tempKey = await CryptoManager.deriveKey(
       phrase,
@@ -497,17 +503,24 @@ async function handleSetupVault(phrase) {
         );
       }
     }
+    console.log("✅ [Vault] Bóveda abierta. Llave de Nivel 2 generada.");
     renderDashboard();
   } catch (e) {
+    console.error("❌ [Vault] Frase incorrecta o error de derivación.");
     alert("⛔ Frase incorrecta.");
   }
 }
 
 async function handleAuth(email, password, isLogin) {
+  console.log(
+    `🚀 [Auth] Intento de ${isLogin ? "Login" : "Registro"} para:`,
+    email
+  );
   try {
     const res = isLogin
       ? await authService.login(email, password)
       : await authService.register(email, password);
+    console.log("✅ [Auth] Autenticación de Firebase exitosa.");
     userKey = await CryptoManager.deriveKey(password, email);
     await setDoc(
       doc(db, "user_metadata", res.user.uid),
@@ -516,6 +529,7 @@ async function handleAuth(email, password, isLogin) {
     );
     fetchData();
   } catch (e) {
+    console.error("❌ [Auth] Error:", e.message);
     alert(e.message);
   }
 }

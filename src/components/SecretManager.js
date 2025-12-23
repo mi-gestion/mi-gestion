@@ -141,6 +141,7 @@ export class SecretManager {
     });
 
     container.querySelector("#save-btn").onclick = (e) => {
+      console.log("🛠️ [Template] Compilando estructura de la plantilla...");
       e.preventDefault();
       this.handleSave(container);
     };
@@ -189,6 +190,8 @@ export class SecretManager {
   // --- MANEJO DE DATOS ---
 
   async decryptAndRender(container, spinner) {
+    const level = this.existingSecret.level;
+    console.log(`📖 [Secret] Abriendo documento Nivel ${level}...`);
     try {
       const keyToUse =
         this.existingSecret.level === "2" ? this.vaultKey : this.userKey;
@@ -198,6 +201,7 @@ export class SecretManager {
         this.existingSecret.content,
         keyToUse
       );
+      console.log("📄 [Secret] Contenido recuperado y parseado.");
       let values = {};
       try {
         values = JSON.parse(jsonString);
@@ -208,6 +212,7 @@ export class SecretManager {
       spinner.classList.add("hidden");
       this.renderFormFields(container, values);
     } catch (error) {
+      console.error("❌ [Secret] Error al abrir documento:", error);
       spinner.innerHTML = `<span class="text-red-500 font-bold">Error al descifrar: ${error.message}</span>`;
     }
   }
@@ -250,6 +255,7 @@ export class SecretManager {
   }
 
   async handleSave(container) {
+    console.log("💾 [Secret] Iniciando proceso de guardado...");
     const title = container.querySelector("#doc-title").value.trim();
     if (!title) return alert("El documento necesita un título.");
 
@@ -260,9 +266,12 @@ export class SecretManager {
 
     if (level === "2" && !this.vaultKey)
       return alert("Debes abrir la Bóveda para guardar en Nivel 2.");
+
+    console.log("User key: ", this.userKey, { level });
     if (!this.userKey) return alert("Error de sesión: Falta llave personal.");
 
     const formValues = this.getFormValues(container);
+    console.log("📝 [Secret] Datos capturados del formulario:", formValues);
 
     try {
       this.onActivity();
@@ -289,8 +298,10 @@ export class SecretManager {
       }
 
       alert("Guardado exitosamente.");
+      console.log("✅ [Firebase] Documento guardado en Firestore.");
       this.onClose();
     } catch (e) {
+      console.error("❌ [Secret] Error al guardar:", e);
       console.error(e);
       alert("Error al guardar: " + e.message);
     }

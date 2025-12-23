@@ -1,6 +1,7 @@
 export class CryptoManager {
   // Deriva una llave maestra a partir de la contraseña y un "salt"
   static async deriveKey(password, salt) {
+    console.log("🔐 [Crypto] Iniciando derivación de llave (PBKDF2)...");
     const enc = new TextEncoder();
     const baseKey = await crypto.subtle.importKey(
       "raw",
@@ -10,7 +11,7 @@ export class CryptoManager {
       ["deriveKey"]
     );
 
-    return await crypto.subtle.deriveKey(
+    const key = await crypto.subtle.deriveKey(
       {
         name: "PBKDF2",
         salt: enc.encode(salt),
@@ -22,9 +23,12 @@ export class CryptoManager {
       false,
       ["encrypt", "decrypt"]
     );
+    console.log("✅ [Crypto] Llave derivada con éxito.");
+    return key;
   }
 
   static async encrypt(text, key) {
+    console.log("🔒 [Crypto] Cifrando contenido...");
     const enc = new TextEncoder();
     const iv = crypto.getRandomValues(new Uint8Array(12)); // Vector de inicialización
     const encrypted = await crypto.subtle.encrypt(
@@ -37,10 +41,12 @@ export class CryptoManager {
     const combined = new Uint8Array(iv.length + encrypted.byteLength);
     combined.set(iv);
     combined.set(new Uint8Array(encrypted), iv.length);
+    console.log("✅ [Crypto] Contenido cifrado y codificado en Base64.");
     return btoa(String.fromCharCode(...combined));
   }
 
   static async decrypt(base64Data, key) {
+    console.log("🔓 [Crypto] Intentando descifrar datos...");
     const combined = new Uint8Array(
       atob(base64Data)
         .split("")
@@ -54,7 +60,7 @@ export class CryptoManager {
       key,
       data
     );
-
+    console.log("✅ [Crypto] Descifrado exitoso.");
     return new TextDecoder().decode(decrypted);
   }
 }

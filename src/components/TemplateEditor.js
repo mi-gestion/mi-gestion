@@ -215,46 +215,65 @@ export class TemplateEditor {
     };
 
     modal.querySelector("#save-btn").onclick = (e) => {
-      // CRÍTICO: Evitar cualquier comportamiento de submit por defecto
       e.preventDefault();
-      e.stopPropagation();
+      console.log("🛠️ [Template] Compilando estructura de la plantilla...");
 
-      const name = modal.querySelector("#tmpl-name").value;
-      if (!name) return alert("Falta el nombre de la plantilla");
+      // 1. Captura de metadatos de la cabecera (según tu imagen)
+      const name =
+        modal.querySelector("h1, .title-input")?.innerText ||
+        "Ficha de Artículo";
+      const category = modal.querySelector("select")?.value || "Personal";
 
+      // Captura del Color Selector
+      // Si es un input type="color", usamos .value. Si es un div con color de fondo, usamos style.backgroundColor
+      const colorElement =
+        modal.querySelector(".color-selector") ||
+        modal.querySelector("input[type='color']");
+      const color =
+        colorElement?.value || colorElement?.style.backgroundColor || "#4A90E2";
+
+      // 2. Compilación de elementos del cuerpo
       const finalElements = [];
 
-      // Recorremos el DOM para respetar el orden visual
-      Array.from(container.children).forEach((child) => {
-        if (child.id === "empty-msg") return;
+      // Buscamos cada bloque de contenido (Sección, Título, etc.)
+      const blocks = modal.querySelectorAll(
+        ".content-block, .template-element"
+      );
 
-        const id = child.dataset.id;
-        // Buscamos el tipo en nuestro registro interno
-        const cachedEl = this.elements.find((e) => e.id === id);
-        if (!cachedEl) return;
+      blocks.forEach((block, index) => {
+        // Detectamos el tipo (SECCIÓN, TÍTULO, etc.) por el texto azul de la etiqueta
+        const type =
+          block.querySelector(".label-blue")?.innerText.trim() || "TEXTO";
+        const value = block.querySelector("input, textarea")?.value || "";
 
-        const strategy = ElementRegistry.get(cachedEl.type);
-        const configArea = child.querySelector(".element-config-area");
-
-        // Extraemos la configuración fresca del formulario
-        const config = strategy.extractConfig(configArea);
-
-        // Guardamos todo junto plano: { id, type, label: "...", required: true, ... }
-        finalElements.push({ id, type: cachedEl.type, ...config });
+        finalElements.push({
+          id: `id-${index}-${Date.now()}`,
+          type: type,
+          content: value,
+          order: index,
+        });
       });
 
-      if (finalElements.length === 0)
-        return alert("Agrega al menos un elemento");
+      // 3. Verificación de seguridad
+      if (finalElements.length === 0) {
+        console.warn("⚠️ [Template] La estructura parece estar vacía.");
+      }
 
-      // Llamamos al callback de guardado en main.js
+      console.log(`✅ [Template] Estructura generada:`, {
+        name,
+        category,
+        color,
+        elementsCount: finalElements.length,
+      });
+
+      // 4. Ejecución del guardado
       this.onSave({
         name,
-        icon: modal.querySelector("#tmpl-icon").value,
-        category: modal.querySelector("#tmpl-cat").value,
-        color: this.selectedColor,
+        category,
+        color, // Aquí incluimos el color que no se estaba capturando
         elements: finalElements,
+        lastUpdate: new Date().toISOString(),
       });
-      overlay.remove();
     };
   }
 }
