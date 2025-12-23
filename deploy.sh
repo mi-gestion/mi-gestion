@@ -3,31 +3,33 @@
 # Colores para la terminal
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+RED='\033[0;31m'
+NC='\033[0m' 
 
-echo -e "${BLUE}Iniciando proceso de despliegue...${NC}"
+echo -e "${BLUE}Iniciando despliegue hacia REPO DE PRODUCCIÓN (segura.git)...${NC}"
 
-# 1. Limpiar y Construir
-echo -e "${GREEN}Paso 1: Compilando y ofuscando el código con Vite...${NC}"
+# 1. Limpiar y Construir con Vite
+echo -e "${GREEN}Paso 1: Compilando y ofuscando el código...${NC}"
 npm run build
 
-# 2. Confirmación de despliegue
-echo -e "${BLUE}La compilación ha terminado en la carpeta /dist.${NC}"
-read -p "¿Deseas subir estos cambios a GitHub ahora? (s/n): " confirm
+# 2. Entrar a la carpeta de salida
+cd dist
 
-if [ "$confirm" = "s" ]; then
-    echo -e "${GREEN}Paso 2: Subiendo a GitHub...${NC}"
-    
-    # Aquí puedes ajustar si quieres subir la carpeta /dist a una rama específica
-    # O simplemente hacer push de todo el repo. 
-    # Lo más común para GitHub Pages es subir el contenido de /dist
-    
-    git add .
-    read -p "Mensaje del commit: " message
-    git commit -m "$message"
-    git push origin main
-    
-    echo -e "${GREEN}¡Despliegue completado con éxito!${NC}"
-else
-    echo -e "${BLUE}Despliegue cancelado por el usuario.${NC}"
-fi
+# 3. Inicializar un Git temporal solo para el código compilado
+git init
+git add .
+git commit -m "Deploy producción: $(date +'%Y-%m-%d %H:%M:%S')"
+
+# 4. Añadir el repositorio de producción como destino
+# Usamos SSH para evitar problemas de permisos
+git remote add production git@github.com:mi-gestion/segura.git
+
+# 5. Forzar la subida al repositorio de producción
+echo -e "${GREEN}Paso 2: Subiendo código ofuscado a 'segura.git'...${NC}"
+git push -f production main
+
+# 6. Limpieza: salir y borrar el rastro de git en dist para no confundir a Vite
+cd ..
+rm -rf dist/.git
+
+echo -e "${GREEN}¡Despliegue en producción completado con éxito!${NC}"
