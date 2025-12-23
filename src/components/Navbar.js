@@ -1,7 +1,9 @@
 export class Navbar {
-  constructor(userName, onLogout) {
+  // 1. Añade 'onProfile' al constructor
+  constructor(userName, onLogout, onProfile) {
     this.userName = userName;
     this.onLogout = onLogout;
+    this.onProfile = onProfile; // Guardamos la referencia
   }
 
   render() {
@@ -25,7 +27,7 @@ export class Navbar {
         </div>
     `;
 
-    // AGREGAR ESTA LÍNEA para que el clic funcione
+    // 2. Conecta el evento click a la función recibida
     e.querySelector("#profile-btn").addEventListener("click", this.onProfile);
     e.querySelector("#logout-btn").addEventListener("click", this.onLogout);
 

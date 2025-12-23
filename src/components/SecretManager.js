@@ -14,18 +14,29 @@ export class SecretManager {
     this.userKey = userKey;
   }
 
-  async saveSecret(title, plainText) {
-    // Encriptamos antes de que salga del navegador
+  async saveSecret(title, plainText, level) {
+    // Verificamos el tiempo con el servidor antes de proceder
+    const isActivityValid = await checkAndRecordServerActivity();
+    if (!isActivityValid) return; // Si la sesión expiró, la función anterior ya hizo el logout
+
+    const encryptionKey = level === "2" ? this.vaultKey : this.userKey;
+
+    if (!encryptionKey) {
+      alert("Error: La llave de nivel " + level + " no está en memoria.");
+      return;
+    }
+
     const encryptedContent = await CryptoManager.encrypt(
       plainText,
-      this.userKey
-    );
+      encryptionKey
+    ); //
 
     await addDoc(collection(db, "secrets"), {
       uid: this.user.uid,
       title: title,
-      content: encryptedContent, // Datos ilegibles para Google
-      createdAt: new Date(),
+      content: encryptedContent,
+      level: level,
+      createdAt: serverTimestamp(), // Usamos el tiempo del servidor para consistencia
     });
   }
 

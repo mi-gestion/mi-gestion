@@ -5,6 +5,20 @@ import { CryptoManager } from "./utils/crypto.js";
 import { AuthView } from "./components/AuthView.js";
 import { Navbar } from "./components/Navbar.js";
 import { ProfileView } from "./components/ProfileView.js";
+import {
+  collection,
+  doc,
+  updateDoc,
+  getDoc,
+  addDoc,
+  serverTimestamp,
+  query,
+  orderBy,
+  limit,
+  getDocs,
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+import { db } from "./services/firebase.js";
 
 // --- ESTADO GLOBAL DE LA APLICACIÓN (En Memoria Volátil) ---
 let currentUser = null;
@@ -12,6 +26,41 @@ let userKey = null; // Nivel 1: Seguridad Intermedia (Login)
 let vaultKey = null; // Nivel 2: Seguridad Máxima (Bóveda)
 
 const app = document.getElementById("app");
+
+async function checkAndRecordServerActivity() {
+  if (!currentUser) return false;
+
+  const userRef = doc(db, "user_metadata", currentUser.uid);
+  const userDoc = await getDoc(userRef);
+  const now = Date.now();
+
+  if (userDoc.exists()) {
+    const lastActivity = userDoc.data().lastActivity?.toMillis() || 0;
+    const diffMinutes = (now - lastActivity) / 1000 / 60;
+
+    // Regla 1: Si pasaron más de 3 minutos, cerrar todo (Bóveda y Puerta)
+    if (diffMinutes >= 3) {
+      vaultKey = null;
+      userKey = null;
+      await authService.logout();
+      alert("Sesión cerrada por inactividad prolongada (servidor).");
+      return false;
+    }
+
+    // Regla 2: Si pasaron más de 1 minuto, cerrar solo la Bóveda
+    if (diffMinutes >= 1 && vaultKey) {
+      vaultKey = null;
+      alert(
+        "La bóveda se ha bloqueado por inactividad. Reingrese su frase en Perfil."
+      );
+      renderDashboard();
+    }
+  }
+
+  // Actualizamos la marca de tiempo en el servidor para la siguiente interacción
+  await updateDoc(userRef, { lastActivity: serverTimestamp() });
+  return true;
+}
 
 /**
  * Lógica de Autenticación Principal (Nivel 1)
@@ -132,4 +181,19 @@ function renderProfile() {
   backBtn.innerHTML = "← Volver al Panel";
   backBtn.onclick = () => renderDashboard();
   app.appendChild(backBtn);
+}
+
+async function logActivity(action, details = "") {
+  if (!currentUser) return;
+  const logsRef = collection(
+    db,
+    "user_metadata",
+    currentUser.uid,
+    "activity_logs"
+  );
+  await addDoc(logsRef, {
+    action: action,
+    details: details,
+    timestamp: serverTimestamp(),
+  });
 }

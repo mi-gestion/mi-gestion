@@ -64,6 +64,14 @@ export class ProfileView {
                             }
                         </button>
                     </div>
+
+                    <div class="mt-10 bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+                        <h3 class="text-xl font-bold text-gray-900 mb-4">Historial de Actividad Reciente</h3>
+                        <div id="activity-log-container" class="space-y-3">
+                            <p class="text-sm text-gray-500 animate-pulse">Cargando historial del servidor...</p>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         `;
