@@ -13,14 +13,15 @@ import {
   query,
   orderBy,
   getDocs,
-  where, // <--- 1. AGREGADO 'where'
+  where,
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { CryptoManager } from "./utils/crypto.js";
 import { AuthView } from "./components/AuthView.js";
 import { Navbar } from "./components/Navbar.js";
-import { ProfileView } from "./components/ProfileView.js";
-import { SecretManager } from "./components/SecretManager.js";
 import { TemplateEditor } from "./components/TemplateEditor.js";
+// NUEVOS COMPONENTES
+import { EditManager } from "./components/EditManager.js";
+import { ViewManager } from "./components/ViewManager.js";
 
 // --- ESTADO GLOBAL ---
 let currentUser = null;
@@ -66,7 +67,7 @@ export async function checkAndRecordServerActivity(
     if (diffMin >= 100 && vaultKey) {
       vaultKey = null;
       await logActivity("Bóveda Bloqueada", "> 100min");
-      renderDashboard();
+      renderDashboard(); // Refrescar UI para mostrar bóveda cerrada
       return true;
     }
   }
@@ -90,7 +91,7 @@ async function logActivity(action, details) {
   }
 }
 
-// --- GESTIÓN DE DATOS (CORREGIDO) ---
+// --- GESTIÓN DE DATOS ---
 
 async function fetchData() {
   if (!currentUser) return;
@@ -99,20 +100,19 @@ async function fetchData() {
     currentUser.email
   );
   try {
-    // 1. Cargar Documentos (Secrets) SOLO del usuario actual
-    // Nota: Si la consola muestra error de "requires an index", sigue el enlace que te da.
+    // 1. Cargar Documentos (Secrets)
     const qSecrets = query(
       collection(db, "secrets"),
-      where("uid", "==", currentUser.uid), // <--- FILTRO DE SEGURIDAD
+      where("uid", "==", currentUser.uid),
       orderBy("createdAt", "desc")
     );
     const snapSecrets = await getDocs(qSecrets);
     allSecrets = snapSecrets.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 
-    // 2. Cargar Plantillas SOLO del usuario actual
+    // 2. Cargar Plantillas
     const qTemplates = query(
       collection(db, "templates"),
-      where("uid", "==", currentUser.uid), // <--- FILTRO DE SEGURIDAD
+      where("uid", "==", currentUser.uid),
       orderBy("createdAt", "desc")
     );
     const snapTemplates = await getDocs(qTemplates);
@@ -126,7 +126,6 @@ async function fetchData() {
     renderDashboard();
   } catch (error) {
     console.error("Error cargando datos:", error);
-    // Si falla por índice, intentamos sin ordenamiento temporalmente
     if (error.code === "failed-precondition") {
       alert(
         "Falta crear un índice en Firebase. Revisa la consola (F12) para el enlace."
@@ -145,7 +144,7 @@ async function deleteItem(collectionName, id) {
   }
 }
 
-// --- RENDERIZADO PRINCIPAL ---
+// --- RENDERIZADO PRINCIPAL (DASHBOARD) ---
 
 function renderDashboard() {
   app.innerHTML = "";
@@ -190,6 +189,8 @@ function renderDashboard() {
     `
   ).join("");
   container.appendChild(filterBar);
+
+  // Exponer setCategory al scope global para el onclick string
   window.setCategory = (id) => {
     currentCategory = id;
     renderDashboard();
@@ -271,6 +272,7 @@ function renderDocumentCard(secret, container) {
   const template = allTemplates.find((t) => t.id === secret.templateId) || {
     icon: "📄",
     category: "personal",
+    name: "Desconocida",
   };
   const isLocked = secret.level === "2" && !vaultKey;
   let title = secret.title || "Sin título";
@@ -307,13 +309,15 @@ function renderDocumentCard(secret, container) {
              <button class="w-full text-sm font-medium ${
                isLocked ? "text-gray-400" : "text-blue-600 hover:text-blue-700"
              } flex items-center justify-center gap-2">
-                ${isLocked ? "🔐 Abrir Bóveda" : "✏️ Editar"}
+                ${isLocked ? "🔐 Abrir Bóveda" : "👁️ Ver Documento"}
             </button>
         </div>
     `;
+
+  // ACCIÓN DE LA TARJETA
   card.onclick = () => {
     if (isLocked) handleVaultToggle();
-    else renderEditor(secret, template);
+    else renderViewer(secret, template); // <--- AHORA VA AL VISOR
   };
   container.appendChild(card);
 }
@@ -323,7 +327,6 @@ function renderTemplateCard(template, container) {
   card.className =
     "bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col h-56 hover:shadow-md transition relative group cursor-pointer hover:border-blue-300";
 
-  // Header con botones de acción
   card.innerHTML = `
         <div class="flex justify-between items-start">
             <span class="text-4xl mb-3">${template.icon || "📄"}</span>
@@ -357,23 +360,46 @@ function renderTemplateCard(template, container) {
         </button>
     `;
 
-  // Acción principal: Crear documento usando plantilla
+  // Acción principal: Crear NUEVO documento usando esta plantilla
   card.onclick = () => renderEditor(null, template);
 
   container.appendChild(card);
 }
 
-// Agregar al scope global para el onclick string
+// Helpers globales para onclicks en strings HTML
 window.editTmpl = (id) => {
   const tmpl = allTemplates.find((t) => t.id === id);
-  if (tmpl) renderTemplateEditor(tmpl); // Pasamos la plantilla existente
+  if (tmpl) renderTemplateEditor(tmpl);
 };
-
 window.delItem = (col, id) => deleteItem(col, id);
 
-// --- EDITORES ---
+// --- NAVEGACIÓN Y VISTAS (VIEWER / EDITOR / TEMPLATE) ---
+
+// 1. VISOR DE DOCUMENTO (NUEVO)
+function renderViewer(documentData, templateData) {
+  app.innerHTML = "";
+
+  const handleEditRequest = () => {
+    renderEditor(documentData, templateData);
+  };
+
+  const vm = new ViewManager(
+    documentData,
+    templateData,
+    userKey,
+    vaultKey,
+    handleEditRequest, // onEdit
+    () => {
+      // onClose
+      appMode = "documents";
+      renderDashboard();
+    }
+  );
+  app.appendChild(vm.render());
+}
+
+// 2. EDITOR DE DOCUMENTO (AHORA USA EditManager)
 function renderEditor(documentData, templateData) {
-  // 1. Definir función de latido (Keep-Alive)
   const reportActivity = () => {
     if (currentUser) {
       const userRef = doc(db, "user_metadata", currentUser.uid);
@@ -385,22 +411,36 @@ function renderEditor(documentData, templateData) {
 
   app.innerHTML = "";
 
-  // 2. Instanciar SecretManager
-  const sm = new SecretManager(currentUser, userKey, vaultKey, reportActivity);
+  const em = new EditManager(
+    currentUser,
+    userKey,
+    vaultKey,
+    reportActivity,
+    () => {
+      // onSaveSuccess
+      appMode = "documents";
+      fetchData(); // Recargar y volver al dashboard
+    },
+    () => {
+      // onCancel
+      if (documentData) {
+        // Si estábamos editando, volver al visor
+        renderViewer(documentData, templateData);
+      } else {
+        // Si era nuevo, volver al dashboard
+        appMode = "documents";
+        renderDashboard();
+      }
+    }
+  );
 
-  // 3. Inyectar dependencias
-  sm.currentTemplate = templateData;
-  sm.existingSecret = documentData;
+  em.currentTemplate = templateData;
+  em.existingSecret = documentData;
 
-  // 4. Configurar Callback de cierre
-  sm.onClose = () => {
-    appMode = "documents"; // Volver al modo documentos
-    fetchData(); // Recargar lista
-  };
-
-  app.appendChild(sm.render());
+  app.appendChild(em.render());
 }
 
+// 3. EDITOR DE PLANTILLA
 function renderTemplateEditor(existingTemplate = null) {
   const reportActivity = () => {
     if (currentUser) {
@@ -413,7 +453,6 @@ function renderTemplateEditor(existingTemplate = null) {
 
   const editor = new TemplateEditor(
     CATEGORIES,
-
     // Callback Guardar
     async (data) => {
       try {
@@ -432,16 +471,13 @@ function renderTemplateEditor(existingTemplate = null) {
           };
 
           if (existingTemplate) {
-            // ACTUALIZAR (UPDATE)
             await updateDoc(doc(db, "templates", existingTemplate.id), payload);
             alert("Plantilla actualizada correctamente");
           } else {
-            // CREAR (CREATE)
             payload.createdAt = serverTimestamp();
             await addDoc(collection(db, "templates"), payload);
             alert("Plantilla creada correctamente");
           }
-
           fetchData();
         }
       } catch (e) {
@@ -449,21 +485,17 @@ function renderTemplateEditor(existingTemplate = null) {
         alert("Error al guardar: " + e.message);
       }
     },
-
     // Callback Cancelar
     () => {},
-
-    // Keep-Alive
     reportActivity,
-
-    // DATOS INICIALES (Pasamos el objeto si existe, o null)
     existingTemplate
   );
 
   app.appendChild(editor.render());
 }
 
-// --- AUTH & VAULT ---
+// --- AUTH & VAULT LOGIC ---
+
 async function handleVaultToggle() {
   if (vaultKey) {
     vaultKey = null;
@@ -503,10 +535,10 @@ async function handleSetupVault(phrase) {
         );
       }
     }
-    console.log("✅ [Vault] Bóveda abierta. Llave de Nivel 2 generada.");
+    console.log("✅ [Vault] Bóveda abierta.");
     renderDashboard();
   } catch (e) {
-    console.error("❌ [Vault] Frase incorrecta o error de derivación.");
+    console.error("❌ [Vault] Frase incorrecta.");
     alert("⛔ Frase incorrecta.");
   }
 }
@@ -520,8 +552,12 @@ async function handleAuth(email, password, isLogin) {
     const res = isLogin
       ? await authService.login(email, password)
       : await authService.register(email, password);
+
     console.log("✅ [Auth] Autenticación de Firebase exitosa.");
+
+    // Generamos la llave maestra en memoria
     userKey = await CryptoManager.deriveKey(password, email);
+
     await setDoc(
       doc(db, "user_metadata", res.user.uid),
       { lastActivity: serverTimestamp() },
@@ -534,34 +570,28 @@ async function handleAuth(email, password, isLogin) {
   }
 }
 
+// --- DETECTOR DE ESTADO (CORREGIDO PARA E2EE) ---
 onAuthStateChanged(auth, (user) => {
   currentUser = user;
 
-  // CASO 1: Usuario detectado y Llave presente.
-  // (Ocurre justo después de hacer login manualmente)
+  // CASO 1: Usuario detectado y Llave presente (Login normal)
   if (user && userKey) {
     fetchData();
     return;
   }
 
-  // CASO 2: Usuario detectado pero FALTA la llave.
-  // (Ocurre al recargar la página: Firebase recuerda al usuario, pero la RAM se borró).
-  // Acción: Mostramos la pantalla de login para pedir la contraseña de nuevo.
+  // CASO 2: Usuario detectado pero FALTA la llave (Recarga de página F5)
   if (user && !userKey) {
     console.warn(
-      "🔒 [Security] Sesión detectada sin llave de cifrado. Solicitando re-autenticación..."
+      "🔒 [Security] Sesión sin llave de cifrado. Requerida autenticación."
     );
     app.innerHTML = "";
-    // Renderizamos la vista de Auth para que el usuario meta su password y se regenere la llave
+    // Forzamos la vista de Login para regenerar la llave
     app.appendChild(new AuthView(handleAuth).render());
-
-    // Opcional: Si quieres ser más estricto, cierra la sesión de Firebase:
-    // authService.logout();
     return;
   }
 
-  // CASO 3: No hay usuario.
-  // (Primera visita o Logout explícito)
+  // CASO 3: No hay usuario (Logout o inicio limpio)
   app.innerHTML = "";
   app.appendChild(new AuthView(handleAuth).render());
 });
