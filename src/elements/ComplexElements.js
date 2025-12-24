@@ -3,9 +3,11 @@ import { ElementRegistry } from "./ElementRegistry.js";
 
 // --- UTILIDADES GLOBALES PARA LA TABLA ---
 window.TableDesignerUtils = {
+  // 1. EXTRAER ESTADO ACTUAL DEL DOM
   getColsFromDOM: (id) => {
     const container = document.getElementById(`cols-list-${id}`);
     if (!container) return [];
+
     const blocks = container.querySelectorAll(".table-col-block");
     return Array.from(blocks).map((block) => {
       const type = block.dataset.type;
@@ -16,23 +18,20 @@ window.TableDesignerUtils = {
     });
   },
 
-  renderCols: (id, cols) => {
-    const list = document.getElementById(`cols-list-${id}`);
-    const hiddenInput = document.getElementById(`columns-input-${id}`);
-    hiddenInput.value = JSON.stringify(cols);
-
-    if (cols.length === 0) {
-      list.innerHTML =
-        '<div class="text-xs text-gray-400 italic text-center py-6 border-2 border-dashed border-gray-100 rounded-lg">Sin columnas. Agrega una abajo.</div>';
-      return;
+  // 2. GENERADOR DE HTML (NUEVO: Para usar tanto en render inicial como en actualizaciones)
+  getColsHtml: (id, cols) => {
+    if (!cols || cols.length === 0) {
+      return '<div class="text-xs text-gray-400 italic text-center py-6 border-2 border-dashed border-gray-100 rounded-lg">Sin columnas. Agrega una abajo.</div>';
     }
 
-    list.innerHTML = cols
+    return cols
       .map((col, idx) => {
         const strategy = ElementRegistry.get(col.type);
         const colId = `${id}-col-${idx}`;
 
-        // AQUI PASAMOS EL CONTEXTO 'table'
+        // Pasamos contexto 'table' para que los inputs se rendericen simplificados si es necesario
+        // Ojo: Aquí estamos renderizando la CONFIGURACIÓN de la columna, no la celda.
+        // La configuración usa 'table' como contexto para mostrar checkbox en vez de select en "required"
         const innerTemplate = strategy.renderTemplate(
           colId,
           col.config || {},
@@ -70,6 +69,17 @@ window.TableDesignerUtils = {
       .join("");
   },
 
+  // 3. RENDERIZAR LISTA EN EL DOM
+  renderCols: (id, cols) => {
+    const list = document.getElementById(`cols-list-${id}`);
+    const hiddenInput = document.getElementById(`columns-input-${id}`);
+    if (!list || !hiddenInput) return;
+
+    hiddenInput.value = JSON.stringify(cols);
+    list.innerHTML = window.TableDesignerUtils.getColsHtml(id, cols);
+  },
+
+  // 4. ACCIONES
   addCol: (id) => {
     let cols = window.TableDesignerUtils.getColsFromDOM(id);
     const typeSelect = document.getElementById(`add-col-type-${id}`);
@@ -94,15 +104,25 @@ window.TableDesignerUtils = {
   },
 };
 
+// --- CLASE DEL ELEMENTO TABLA ---
+
 export class TableElement extends BaseElement {
   constructor() {
     super("table", "▦", "Tabla Dinámica", "complex");
   }
 
+  // --- MODO DISEÑO (TEMPLATE) ---
   renderTemplate(id, data = {}) {
     const columns = data.columns || [];
     const columnsJson = JSON.stringify(columns).replace(/"/g, "&quot;");
     const inputTypes = ElementRegistry.getGrouped().input.items;
+
+    // CORRECCIÓN: Generamos el HTML inicial AQUÍ mismo usando la utilidad
+    // Ya no dependemos de un <script> que el navegador bloquea.
+    const initialColumnsHtml = window.TableDesignerUtils.getColsHtml(
+      id,
+      columns
+    );
 
     return `
             <div class="space-y-4 table-designer" data-id="${id}">
@@ -115,8 +135,9 @@ export class TableElement extends BaseElement {
                 
                 <div class="border rounded-lg p-3 bg-gray-50 border-gray-200">
                      <label class="text-[10px] font-bold uppercase text-gray-500 mb-2 block">Columnas</label>
+                     
                      <div class="columns-list mb-4 min-h-[50px]" id="cols-list-${id}">
-                        <div class="text-center text-xs text-gray-400">Cargando columnas...</div>
+                        ${initialColumnsHtml}
                      </div>
 
                      <div class="flex gap-2 items-center bg-white p-2 rounded border border-gray-200 shadow-sm">
@@ -134,7 +155,6 @@ export class TableElement extends BaseElement {
                      </div>
                      
                      <input type="hidden" name="columns" id="columns-input-${id}" value="${columnsJson}">
-                     <script>setTimeout(() => { const cols = JSON.parse(document.getElementById('columns-input-${id}').value || '[]'); window.TableDesignerUtils.renderCols('${id}', cols); }, 0);</script>
                 </div>
             </div>
             ${BaseElement.renderLayoutConfig(data, 4, 8)} 
@@ -145,14 +165,18 @@ export class TableElement extends BaseElement {
     const base = super.extractConfig(c);
     const designerDiv = c.querySelector(".table-designer");
     const id = designerDiv.dataset.id;
+
+    // Leemos del DOM para asegurar que tenemos los últimos cambios (incluso los no guardados en el input hidden)
     const currentCols = window.TableDesignerUtils.getColsFromDOM(id);
+
     return {
       ...base,
       label: c.querySelector('[name="label"]').value,
       columns: currentCols,
     };
   }
-  // renderEditor, renderPrint, etc. se mantienen igual
+
+  // --- MODO EDITOR (USO) ---
   renderEditor(config, value = []) {
     const cols = config.columns || [];
     const rows = Array.isArray(value) ? value : [];
@@ -198,11 +222,14 @@ export class TableElement extends BaseElement {
         const elementStrategy = ElementRegistry.get(col.type);
         const header = col.config ? col.config.label : col.header;
         const cellConfig = col.config || { label: header };
+
+        // Pasamos contexto 'table' para renderizado compacto
         const inputHtml = elementStrategy.renderEditor(
           cellConfig,
           rowData[header] || "",
           "table"
         );
+
         return `<td class="p-1 border-b align-top bg-white" data-header="${header}">${inputHtml}</td>`;
       })
       .join("");
@@ -220,8 +247,14 @@ export class TableElement extends BaseElement {
         tr.innerHTML = this.generateRowHtml(cols, {});
         tbody.appendChild(tr);
         tr.querySelector(".delete-row-btn").onclick = () => tr.remove();
+
+        // Importante: Si los elementos hijos tienen listeners (ej: ojito password), hay que activarlos
+        // (Esto requeriría un sistema más complejo de attachListeners recursivo,
+        // pero por ahora el HTML básico funciona).
       };
     });
+
+    // Listeners de borrado iniciales
     container.querySelectorAll(".delete-row-btn").forEach((btn) => {
       btn.onclick = (e) => e.target.closest("tr").remove();
     });
@@ -234,7 +267,14 @@ export class TableElement extends BaseElement {
       tr.querySelectorAll("td[data-header]").forEach((td) => {
         const header = td.dataset.header;
         const input = td.querySelector("input, select, textarea");
-        if (input) rowData[header] = input.value;
+        // Si hay input oculto (ej: UrlElement), buscar .url-storage
+        const storage = td.querySelector(".url-storage");
+
+        if (storage) {
+          rowData[header] = storage.value; // Valor JSON completo
+        } else if (input) {
+          rowData[header] = input.value;
+        }
       });
       if (Object.keys(rowData).length > 0) rows.push(rowData);
     });

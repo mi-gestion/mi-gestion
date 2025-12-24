@@ -27,7 +27,9 @@ export class ViewManager {
         : "bg-green-100 text-green-700";
 
     container.innerHTML = `
-        <div class="flex items-center justify-between mb-8 pb-4 border-b border-gray-100">
+        <div id="print-backdrop" class="fixed inset-0 z-20 hidden cursor-default"></div>
+
+        <div class="flex items-center justify-between mb-8 pb-4 border-b border-gray-100 relative z-30">
             <div class="flex items-center gap-4">
                 <button type="button" id="back-btn" class="p-2 hover:bg-gray-100 rounded-full transition text-gray-500">←</button>
                 <div>
@@ -44,11 +46,12 @@ export class ViewManager {
                     <span>✏️</span> Editar
                 </button>
 
-                <div class="relative group">
-                    <button type="button" id="print-toggle" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg transition flex items-center gap-2">
+                <div class="relative">
+                    <button type="button" id="print-toggle" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg transition flex items-center gap-2 relative z-30">
                         <span>🖨️</span> Imprimir
                     </button>
-                    <div class="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 hidden group-hover:block z-30 animate-fade-in">
+                    
+                    <div id="print-menu" class="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 hidden z-40 animate-slide-up">
                          <div class="p-2 bg-gray-50 border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase text-center">Formato</div>
                          <button class="print-opt w-full text-left px-4 py-3 text-sm hover:bg-blue-50 hover:text-blue-700" data-mode="normal">📄 Normal</button>
                          <button class="print-opt w-full text-left px-4 py-3 text-sm hover:bg-blue-50 hover:text-blue-700" data-mode="compact">📊 Compacta</button>
@@ -58,18 +61,44 @@ export class ViewManager {
             </div>
         </div>
 
-        <div id="view-content" class="flex-1 space-y-6 pb-10">
+        <div id="view-content" class="flex-1 space-y-6 pb-10 z-0">
             <div id="loading-spinner" class="text-center py-20 text-gray-400">
                 <span class="animate-pulse">🔓 Descifrando documento seguro...</span>
             </div>
         </div>
     `;
 
-    container.querySelector("#back-btn").onclick = this.onClose;
-    container.querySelector("#edit-btn").onclick = () => this.onEdit();
+    // --- LOGICA DE MENÚ IMPRIMIR ---
+    const printBtn = container.querySelector("#print-toggle");
+    const printMenu = container.querySelector("#print-menu");
+    const backdrop = container.querySelector("#print-backdrop");
 
+    // 1. Alternar menú
+    printBtn.onclick = (e) => {
+      e.stopPropagation();
+      const isHidden = printMenu.classList.contains("hidden");
+      if (isHidden) {
+        printMenu.classList.remove("hidden");
+        backdrop.classList.remove("hidden"); // Activar telón
+      } else {
+        printMenu.classList.add("hidden");
+        backdrop.classList.add("hidden");
+      }
+    };
+
+    // 2. Cerrar al hacer clic fuera
+    backdrop.onclick = () => {
+      printMenu.classList.add("hidden");
+      backdrop.classList.add("hidden");
+    };
+
+    // 3. Cerrar al seleccionar opción e Imprimir
     container.querySelectorAll(".print-opt").forEach((btn) => {
       btn.onclick = () => {
+        // Cerrar menú primero
+        printMenu.classList.add("hidden");
+        backdrop.classList.add("hidden");
+        // Ejecutar impresión
         PrintManager.print(
           title,
           this.template,
@@ -78,6 +107,10 @@ export class ViewManager {
         );
       };
     });
+
+    // --- OTROS LISTENERS ---
+    container.querySelector("#back-btn").onclick = this.onClose;
+    container.querySelector("#edit-btn").onclick = () => this.onEdit();
 
     this.decryptAndShow(
       container.querySelector("#view-content"),
@@ -101,11 +134,8 @@ export class ViewManager {
 
       spinner.classList.add("hidden");
 
-      // --- AQUÍ EL CAMBIO CLAVE ---
-      // 1. Usamos grid-cols-4 para igualar al editor
       let html = '<div class="grid grid-cols-4 gap-6">';
 
-      // Mapa de clases estático para que Tailwind no falle
       const colSpanClasses = {
         1: "col-span-1",
         2: "col-span-2",
@@ -118,7 +148,6 @@ export class ViewManager {
         const val = this.decryptedValues[el.id];
 
         if (strategy) {
-          // 2. Obtenemos el ancho configurado (default 4)
           const span = el.colSpanEditor || 4;
           const gridClass = colSpanClasses[span] || "col-span-4";
 
