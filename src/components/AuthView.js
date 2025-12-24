@@ -32,7 +32,8 @@ export class AuthView {
                         <input type="${
                           this.passwordVisible ? "text" : "password"
                         }" id="password" required 
-                               class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition">
+                               class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition"
+                           readonly onfocus="this.removeAttribute('readonly');">
                         <button type="button" id="toggle-password" class="absolute right-3 top-9 text-gray-400 hover:text-gray-600">
                             ${this.passwordVisible ? "👁️‍🗨️" : "👁️"}
                         </button>

@@ -186,12 +186,20 @@ export class TemplateEditor {
     const colorContainer = modal.querySelector("#color-selector");
 
     const renderColors = () => {
+      const colorMap = {
+        blue: "bg-blue-500",
+        green: "bg-green-500",
+        red: "bg-red-500",
+        purple: "bg-purple-500",
+        yellow: "bg-yellow-400",
+        gray: "bg-gray-500",
+      };
       colorContainer.innerHTML = "";
       colors.forEach((c) => {
         const dot = document.createElement("div");
         const isSelected = this.selectedColor === c;
-        dot.className = `w-4 h-4 rounded-full bg-${
-          c === "yellow" ? "yellow-400" : c + "-500"
+        dot.className = `w-4 h-4 rounded-full ${
+          colorMap[c]
         } cursor-pointer hover:scale-125 transition ${
           isSelected ? "ring-2 ring-offset-1 ring-black" : ""
         }`;

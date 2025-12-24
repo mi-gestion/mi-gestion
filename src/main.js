@@ -58,14 +58,14 @@ export async function checkAndRecordServerActivity(
     const lastActivity = userDoc.data().lastActivity?.toMillis() || now;
     const diffMin = (now - lastActivity) / 1000 / 60;
 
-    if (diffMin >= 3) {
-      await logActivity("Sesión Expirada", "> 3min");
+    if (diffMin >= 300) {
+      await logActivity("Sesión Expirada", "> 300min");
       authService.logout();
       return false;
     }
-    if (diffMin >= 1 && vaultKey) {
+    if (diffMin >= 100 && vaultKey) {
       vaultKey = null;
-      await logActivity("Bóveda Bloqueada", "> 1min");
+      await logActivity("Bóveda Bloqueada", "> 100min");
       renderDashboard();
       return true;
     }
