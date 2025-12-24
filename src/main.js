@@ -536,9 +536,32 @@ async function handleAuth(email, password, isLogin) {
 
 onAuthStateChanged(auth, (user) => {
   currentUser = user;
-  if (user) fetchData();
-  else {
-    app.innerHTML = "";
-    app.appendChild(new AuthView(handleAuth).render());
+
+  // CASO 1: Usuario detectado y Llave presente.
+  // (Ocurre justo después de hacer login manualmente)
+  if (user && userKey) {
+    fetchData();
+    return;
   }
+
+  // CASO 2: Usuario detectado pero FALTA la llave.
+  // (Ocurre al recargar la página: Firebase recuerda al usuario, pero la RAM se borró).
+  // Acción: Mostramos la pantalla de login para pedir la contraseña de nuevo.
+  if (user && !userKey) {
+    console.warn(
+      "🔒 [Security] Sesión detectada sin llave de cifrado. Solicitando re-autenticación..."
+    );
+    app.innerHTML = "";
+    // Renderizamos la vista de Auth para que el usuario meta su password y se regenere la llave
+    app.appendChild(new AuthView(handleAuth).render());
+
+    // Opcional: Si quieres ser más estricto, cierra la sesión de Firebase:
+    // authService.logout();
+    return;
+  }
+
+  // CASO 3: No hay usuario.
+  // (Primera visita o Logout explícito)
+  app.innerHTML = "";
+  app.appendChild(new AuthView(handleAuth).render());
 });

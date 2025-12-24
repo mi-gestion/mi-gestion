@@ -226,62 +226,65 @@ export class TemplateEditor {
       e.preventDefault();
       console.log("🛠️ [Template] Compilando estructura de la plantilla...");
 
-      // 1. Captura de metadatos de la cabecera (según tu imagen)
-      const name =
-        modal.querySelector("h1, .title-input")?.innerText ||
-        "Ficha de Artículo";
-      const category = modal.querySelector("select")?.value || "Personal";
+      // 1. CAPTURA DE METADATOS (Usando los IDs correctos del render)
+      const nameInput = modal.querySelector("#tmpl-name");
+      const iconInput = modal.querySelector("#tmpl-icon");
+      const catInput = modal.querySelector("#tmpl-cat");
 
-      // Captura del Color Selector
-      // Si es un input type="color", usamos .value. Si es un div con color de fondo, usamos style.backgroundColor
-      const colorElement =
-        modal.querySelector(".color-selector") ||
-        modal.querySelector("input[type='color']");
-      const color =
-        colorElement?.value || colorElement?.style.backgroundColor || "#4A90E2";
+      const name = nameInput.value.trim() || "Plantilla Sin Nombre";
+      const icon = iconInput.value.trim() || "Ei"; // Valor por defecto si está vacío
+      const category = catInput.value;
+      const color = this.selectedColor || "blue";
 
-      // 2. Compilación de elementos del cuerpo
-      const finalElements = [];
+      // 2. COMPILACIÓN DE ELEMENTOS
+      // Usamos 'this.elements' que ya mantiene el orden y los IDs correctos
+      const finalElements = this.elements.map((el) => {
+        // Buscamos el div en el DOM para extraer la configuración actual (lo que el usuario escribió)
+        const domElement = container.querySelector(`div[data-id="${el.id}"]`);
 
-      // Buscamos cada bloque de contenido (Sección, Título, etc.)
-      const blocks = modal.querySelectorAll(
-        ".content-block, .template-element"
-      );
+        // Obtenemos la estrategia para saber cómo extraer la data de este tipo de elemento
+        const strategy = ElementRegistry.get(el.type);
 
-      blocks.forEach((block, index) => {
-        // Detectamos el tipo (SECCIÓN, TÍTULO, etc.) por el texto azul de la etiqueta
-        const type =
-          block.querySelector(".label-blue")?.innerText.trim() || "TEXTO";
-        const value = block.querySelector("input, textarea")?.value || "";
+        // Extraemos la configuración visual (labels, opciones, etc.)
+        // Usamos .querySelector('.element-config-area') porque ahí es donde renderTemplate inyectó los inputs
+        const configContainer = domElement.querySelector(
+          ".element-config-area"
+        );
+        const currentConfig = strategy.extractConfig(configContainer);
 
-        finalElements.push({
-          id: `id-${index}-${Date.now()}`,
-          type: type,
-          content: value,
-          order: index,
-        });
+        return {
+          id: el.id,
+          type: el.type,
+          ...currentConfig, // Mezclamos la config extraída (label, required, options, etc.)
+        };
       });
 
-      // 3. Verificación de seguridad
+      // 3. VALIDACIÓN
       if (finalElements.length === 0) {
-        console.warn("⚠️ [Template] La estructura parece estar vacía.");
+        alert("⚠️ La plantilla está vacía. Añade al menos un elemento.");
+        return;
       }
 
       console.log(`✅ [Template] Estructura generada:`, {
         name,
         category,
+        icon,
         color,
         elementsCount: finalElements.length,
       });
 
-      // 4. Ejecución del guardado
+      // 4. EJECUCIÓN DEL GUARDADO
       this.onSave({
         name,
         category,
-        color, // Aquí incluimos el color que no se estaba capturando
+        icon, // ¡Importante! Ahora sí enviamos el icono
+        color,
         elements: finalElements,
         lastUpdate: new Date().toISOString(),
       });
+
+      // Cerrar modal (opcional, depende de tu flujo, normalmente se cierra en el callback)
+      // overlay.remove();
     };
   }
 }
