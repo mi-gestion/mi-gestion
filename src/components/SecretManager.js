@@ -65,8 +65,8 @@ export class SecretManager {
                 </div>
             </div>
 
-            <div id="dynamic-form-container" class="flex-1 relative space-y-6 pb-10 z-0">
-                <div id="loading-spinner" class="text-center py-10 text-gray-400 hidden">
+            <div id="dynamic-form-container" class="grid grid-cols-4 gap-6 pb-10 z-0">
+                <div id="loading-spinner" class="text-center py-10 text-gray-400 hidden col-span-4">
                     <span class="animate-pulse">🔓 Descifrando información segura...</span>
                 </div>
             </div>
@@ -220,12 +220,30 @@ export class SecretManager {
   renderFormFields(container, values) {
     if (!this.currentTemplate?.elements) return;
 
+    // 2. MAPA DE CLASES ESTÁTICAS (Solución al problema de Tailwind)
+    // Al escribir las cadenas completas aquí, Tailwind las detecta y genera el CSS.
+    const colSpanClasses = {
+      1: "col-span-1",
+      2: "col-span-2",
+      3: "col-span-3",
+      4: "col-span-4",
+    };
+
     this.currentTemplate.elements.forEach((element) => {
       const strategy = ElementRegistry.get(element.type);
       if (!strategy) return;
 
       const wrapper = document.createElement("div");
-      wrapper.className = "field-wrapper animate-fade-in";
+
+      // Obtenemos el valor (por defecto 4 si no existe)
+      const span = element.colSpanEditor || 4;
+
+      // Usamos el mapa para obtener la clase. Si falla, fallback a col-span-4
+      const gridClass = colSpanClasses[span] || "col-span-4";
+
+      // Aplicamos la clase estática
+      wrapper.className = `field-wrapper animate-fade-in ${gridClass}`;
+
       wrapper.dataset.id = element.id;
       wrapper.dataset.type = element.type;
 
@@ -315,14 +333,22 @@ export class SecretManager {
       container.querySelector("#doc-title").value || "Documento sin título";
     const date = new Date().toLocaleDateString();
 
-    let contentHtml = "";
+    let contentHtml = '<div class="print-grid">'; // Inicio del Grid
+
     if (this.currentTemplate && this.currentTemplate.elements) {
       this.currentTemplate.elements.forEach((el) => {
         const strategy = ElementRegistry.get(el.type);
         const val = currentValues[el.id];
-        contentHtml += strategy.renderPrint(el, val, mode);
+
+        // Obtenemos el span de impresión (Default 8)
+        const span = el.colSpanPrint || 8;
+
+        const renderedEl = strategy.renderPrint(el, val, mode);
+        // Envolvemos cada elemento en su contenedor de columna
+        contentHtml += `<div class="print-col-span-${span}">${renderedEl}</div>`;
       });
     }
+    contentHtml += "</div>"; // Fin del Grid
 
     const styles = this.getPrintStyles(mode);
 
@@ -377,33 +403,39 @@ export class SecretManager {
   }
 
   getPrintStyles(mode) {
+    // CSS Base para Grid de impresión
+    const gridCSS = `
+        .print-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 15px; }
+        .print-col-span-1 { grid-column: span 1; }
+        .print-col-span-2 { grid-column: span 2; }
+        .print-col-span-3 { grid-column: span 3; }
+        .print-col-span-4 { grid-column: span 4; }
+        .print-col-span-5 { grid-column: span 5; }
+        .print-col-span-6 { grid-column: span 6; }
+        .print-col-span-7 { grid-column: span 7; }
+        .print-col-span-8 { grid-column: span 8; }
+    `;
+
     if (mode === "compact") {
+      // Compacto ahora usa Grid en lugar de column-count
       return `
-                body { font-size: 11px; padding: 10px; }
-                .content { column-count: 2; column-gap: 20px; }
-                .break-inside-avoid { break-inside: avoid; }
-                h1 { font-size: 18px; }
-                h2, h3 { font-size: 14px; margin-top: 10px; }
-                p { margin-bottom: 5px; }
-                div { margin-bottom: 5px; }
-            `;
-    } else if (mode === "easy") {
-      return `
-                body { font-size: 18px; line-height: 1.6; max-width: 800px; margin: 0 auto; }
-                h1 { font-size: 32px; text-align: center; border-bottom: 3px solid black; padding-bottom: 10px; }
-                strong { color: #2d3748; }
-                .content > div { margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px dashed #cbd5e0; }
-                table th { background-color: #2d3748; color: white; padding: 10px; }
-                table td { padding: 10px; font-size: 16px; border: 1px solid #4a5568; }
-            `;
+            body { font-size: 11px; padding: 10px; }
+            ${gridCSS}
+            h1 { font-size: 18px; grid-column: span 8; }
+            h2, h3 { font-size: 14px; margin-top: 10px; }
+            p { margin-bottom: 5px; }
+            table { width: 100%; border-collapse: collapse; }
+        `;
     } else {
-      // NORMAL
+      // Normal y Easy
       return `
-                body { font-size: 14px; line-height: 1.5; max-width: 900px; margin: 0 auto; }
-                h1 { font-size: 24px; color: #2b6cb0; }
-                table th { background-color: #f7fafc; text-align: left; padding: 8px; font-weight: bold; border: 1px solid #e2e8f0; }
-                table td { padding: 8px; border: 1px solid #e2e8f0; }
-            `;
+            body { font-size: 14px; line-height: 1.5; max-width: 900px; margin: 0 auto; }
+            ${gridCSS}
+            h1 { font-size: 24px; color: #2b6cb0; grid-column: span 8; }
+            h2, h3 { grid-column: span 8; } /* Títulos fuerzan ancho completo a menos que se configure */
+            table th { background-color: #f7fafc; text-align: left; padding: 8px; font-weight: bold; border: 1px solid #e2e8f0; }
+            table td { padding: 8px; border: 1px solid #e2e8f0; }
+        `;
     }
   }
 }

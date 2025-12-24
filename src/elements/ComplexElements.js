@@ -2,105 +2,107 @@ import { BaseElement } from "./BaseElement.js";
 import { ElementRegistry } from "./ElementRegistry.js";
 
 // --- UTILIDADES GLOBALES PARA LA TABLA ---
-// Definimos esto fuera de la clase para que esté disponible globalmente
-// sin depender de la ejecución de scripts inline.
 window.TableDesignerUtils = {
-  renderCols: (id) => {
-    const list = document.getElementById(`cols-list-${id}`);
-    const input = document.getElementById(`columns-input-${id}`);
-    if (!list || !input) return;
+  getColsFromDOM: (id) => {
+    const container = document.getElementById(`cols-list-${id}`);
+    if (!container) return [];
+    const blocks = container.querySelectorAll(".table-col-block");
+    return Array.from(blocks).map((block) => {
+      const type = block.dataset.type;
+      const strategy = ElementRegistry.get(type);
+      const configArea = block.querySelector(".element-config-area");
+      const config = strategy.extractConfig(configArea);
+      return { type, config };
+    });
+  },
 
-    let cols = [];
-    try {
-      cols = JSON.parse(input.value || "[]");
-    } catch (e) {
-      cols = [];
-    }
+  renderCols: (id, cols) => {
+    const list = document.getElementById(`cols-list-${id}`);
+    const hiddenInput = document.getElementById(`columns-input-${id}`);
+    hiddenInput.value = JSON.stringify(cols);
 
     if (cols.length === 0) {
       list.innerHTML =
-        '<div class="text-xs text-gray-400 italic text-center">Sin columnas definidas</div>';
+        '<div class="text-xs text-gray-400 italic text-center py-6 border-2 border-dashed border-gray-100 rounded-lg">Sin columnas. Agrega una abajo.</div>';
       return;
     }
 
     list.innerHTML = cols
-      .map(
-        (c, idx) => `
-            <div class="flex items-center justify-between bg-white p-2 border rounded shadow-sm animate-fade-in">
-                <div class="flex items-center gap-2">
-                    <span class="text-xs font-bold text-gray-700">${c.header}</span>
-                    <span class="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded uppercase font-bold border border-blue-100">${c.type}</span>
+      .map((col, idx) => {
+        const strategy = ElementRegistry.get(col.type);
+        const colId = `${id}-col-${idx}`;
+
+        // AQUI PASAMOS EL CONTEXTO 'table'
+        const innerTemplate = strategy.renderTemplate(
+          colId,
+          col.config || {},
+          "table"
+        );
+
+        return `
+            <div class="table-col-block group relative bg-white border border-gray-200 rounded-xl p-3 mb-3 hover:border-blue-300 hover:shadow-sm transition animate-fade-in" data-type="${
+              col.type
+            }">
+                <div class="flex justify-between items-center mb-3 border-b border-gray-100 pb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg">${strategy.icon}</span>
+                        <span class="text-xs font-bold uppercase text-blue-600">${
+                          strategy.label
+                        }</span>
+                    </div>
+                    <div class="flex gap-1 items-center bg-gray-50 rounded-lg p-0.5">
+                         <button type="button" title="Subir" onclick="window.TableDesignerUtils.moveCol('${id}', ${idx}, -1)" class="w-6 h-6 flex items-center justify-center rounded hover:bg-white hover:shadow-sm text-gray-400 hover:text-blue-600 transition disabled:opacity-30 disabled:cursor-not-allowed" ${
+          idx === 0 ? "disabled" : ""
+        }>↑</button>
+                        <button type="button" title="Bajar" onclick="window.TableDesignerUtils.moveCol('${id}', ${idx}, 1)" class="w-6 h-6 flex items-center justify-center rounded hover:bg-white hover:shadow-sm text-gray-400 hover:text-blue-600 transition disabled:opacity-30 disabled:cursor-not-allowed" ${
+          idx === cols.length - 1 ? "disabled" : ""
+        }>↓</button>
+                        <div class="w-px h-4 bg-gray-200 mx-1"></div>
+                        <button type="button" title="Eliminar" onclick="window.TableDesignerUtils.removeCol('${id}', ${idx})" class="w-6 h-6 flex items-center justify-center rounded hover:bg-white hover:shadow-sm text-gray-400 hover:text-red-500 transition">🗑️</button>
+                    </div>
                 </div>
-                <button type="button" onclick="window.TableDesignerUtils.removeCol('${id}', ${idx})" class="text-gray-300 hover:text-red-500 font-bold px-2">×</button>
+                <div class="element-config-area">
+                    ${innerTemplate}
+                </div>
             </div>
-        `
-      )
+        `;
+      })
       .join("");
   },
 
   addCol: (id) => {
-    const headerInput = document.getElementById(`new-col-header-${id}`);
-    const typeInput = document.getElementById(`new-col-type-${id}`);
-    const hiddenInput = document.getElementById(`columns-input-${id}`);
-
-    const header = headerInput.value.trim();
-    const type = typeInput.value;
-
-    if (!header) {
-      headerInput.focus();
-      headerInput.classList.add("border-red-400");
-      return;
-    }
-    headerInput.classList.remove("border-red-400");
-
-    let cols = JSON.parse(hiddenInput.value || "[]");
-    cols.push({ header, type });
-    hiddenInput.value = JSON.stringify(cols);
-
-    headerInput.value = ""; // Limpiar input
-    window.TableDesignerUtils.renderCols(id); // Re-pintar lista
+    let cols = window.TableDesignerUtils.getColsFromDOM(id);
+    const typeSelect = document.getElementById(`add-col-type-${id}`);
+    const type = typeSelect.value;
+    cols.push({ type, config: {} });
+    window.TableDesignerUtils.renderCols(id, cols);
   },
 
   removeCol: (id, idx) => {
-    const hiddenInput = document.getElementById(`columns-input-${id}`);
-    let cols = JSON.parse(hiddenInput.value || "[]");
+    let cols = window.TableDesignerUtils.getColsFromDOM(id);
+    if (!confirm("¿Eliminar esta columna?")) return;
     cols.splice(idx, 1);
-    hiddenInput.value = JSON.stringify(cols);
-    window.TableDesignerUtils.renderCols(id);
+    window.TableDesignerUtils.renderCols(id, cols);
+  },
+
+  moveCol: (id, idx, dir) => {
+    let cols = window.TableDesignerUtils.getColsFromDOM(id);
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= cols.length) return;
+    [cols[idx], cols[newIdx]] = [cols[newIdx], cols[idx]];
+    window.TableDesignerUtils.renderCols(id, cols);
   },
 };
-
-// --- CLASE DEL ELEMENTO TABLA ---
 
 export class TableElement extends BaseElement {
   constructor() {
     super("table", "▦", "Tabla Dinámica", "complex");
   }
 
-  // --- MODO DISEÑO (TEMPLATE) ---
   renderTemplate(id, data = {}) {
     const columns = data.columns || [];
-    // Obtenemos los tipos de inputs disponibles dinámicamente
-    const inputTypes = ElementRegistry.getGrouped().input.items;
     const columnsJson = JSON.stringify(columns).replace(/"/g, "&quot;");
-
-    // Generamos el HTML inicial de la lista de columnas "Pre-renderizado"
-    // para que se vea bien antes de cualquier interacción
-    const initialListHtml =
-      columns.length === 0
-        ? '<div class="text-xs text-gray-400 italic text-center">Sin columnas definidas</div>'
-        : columns
-            .map(
-              (c, idx) => `
-                <div class="flex items-center justify-between bg-white p-2 border rounded shadow-sm">
-                    <div class="flex items-center gap-2">
-                        <span class="text-xs font-bold text-gray-700">${c.header}</span>
-                        <span class="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded uppercase font-bold border border-blue-100">${c.type}</span>
-                    </div>
-                    <button type="button" onclick="window.TableDesignerUtils.removeCol('${id}', ${idx})" class="text-gray-300 hover:text-red-500 font-bold px-2">×</button>
-                </div>`
-            )
-            .join("");
+    const inputTypes = ElementRegistry.getGrouped().input.items;
 
     return `
             <div class="space-y-4 table-designer" data-id="${id}">
@@ -112,47 +114,45 @@ export class TableElement extends BaseElement {
                 </div>
                 
                 <div class="border rounded-lg p-3 bg-gray-50 border-gray-200">
-                    <label class="text-[10px] font-bold uppercase text-gray-500 mb-2 block">Columnas de Datos</label>
-                    
-                    <div class="columns-list space-y-2 mb-3" id="cols-list-${id}">
-                        ${initialListHtml}
-                    </div>
+                     <label class="text-[10px] font-bold uppercase text-gray-500 mb-2 block">Columnas</label>
+                     <div class="columns-list mb-4 min-h-[50px]" id="cols-list-${id}">
+                        <div class="text-center text-xs text-gray-400">Cargando columnas...</div>
+                     </div>
 
-                    <div class="flex gap-2 items-end border-t border-gray-200 pt-3">
+                     <div class="flex gap-2 items-center bg-white p-2 rounded border border-gray-200 shadow-sm">
                         <div class="flex-1">
-                            <label class="text-[10px] text-gray-400 font-bold uppercase">Encabezado</label>
-                            <input type="text" id="new-col-header-${id}" class="w-full p-1.5 border rounded text-xs focus:ring-1 focus:ring-blue-500 outline-none" placeholder="Ej: Precio Unitario">
-                        </div>
-                        <div class="w-32">
-                            <label class="text-[10px] text-gray-400 font-bold uppercase">Tipo de Dato</label>
-                            <select id="new-col-type-${id}" class="w-full p-1.5 border rounded text-xs bg-white focus:ring-1 focus:ring-blue-500 outline-none">
+                             <select id="add-col-type-${id}" class="w-full p-2 border rounded text-xs bg-gray-50 outline-none cursor-pointer">
                                 ${inputTypes
                                   .map(
                                     (t) =>
-                                      `<option value="${t.type}">${t.label}</option>`
+                                      `<option value="${t.type}">${t.icon} ${t.label}</option>`
                                   )
                                   .join("")}
-                            </select>
+                             </select>
                         </div>
-                        <button type="button" class="bg-blue-600 hover:bg-blue-700 text-white p-1.5 rounded-lg text-sm font-bold w-8 h-8 flex items-center justify-center shadow-sm transition" onclick="window.TableDesignerUtils.addCol('${id}')">
-                            +
-                        </button>
-                    </div>
-                    
-                    <input type="hidden" name="columns" id="columns-input-${id}" value="${columnsJson}">
+                        <button type="button" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold" onclick="window.TableDesignerUtils.addCol('${id}')">+</button>
+                     </div>
+                     
+                     <input type="hidden" name="columns" id="columns-input-${id}" value="${columnsJson}">
+                     <script>setTimeout(() => { const cols = JSON.parse(document.getElementById('columns-input-${id}').value || '[]'); window.TableDesignerUtils.renderCols('${id}', cols); }, 0);</script>
                 </div>
             </div>
+            ${BaseElement.renderLayoutConfig(data, 4, 8)} 
         `;
   }
 
   extractConfig(c) {
+    const base = super.extractConfig(c);
+    const designerDiv = c.querySelector(".table-designer");
+    const id = designerDiv.dataset.id;
+    const currentCols = window.TableDesignerUtils.getColsFromDOM(id);
     return {
+      ...base,
       label: c.querySelector('[name="label"]').value,
-      columns: JSON.parse(c.querySelector('[name="columns"]').value || "[]"),
+      columns: currentCols,
     };
   }
-
-  // --- MODO EDITOR (USO) ---
+  // renderEditor, renderPrint, etc. se mantienen igual
   renderEditor(config, value = []) {
     const cols = config.columns || [];
     const rows = Array.isArray(value) ? value : [];
@@ -162,32 +162,30 @@ export class TableElement extends BaseElement {
     const colsConfigJson = JSON.stringify(cols).replace(/"/g, "&quot;");
 
     return `
-            <div class="mb-8 table-container" data-cols='${colsConfigJson}'>
+            <div class="mb-8 table-container" data-cols="${colsConfigJson}">
                 <div class="flex justify-between items-end mb-2">
                     <label class="block text-sm font-bold text-blue-800 uppercase tracking-wide">${
                       config.label
                     }</label>
                 </div>
-                
                 <div class="overflow-x-auto border border-gray-200 rounded-lg shadow-sm bg-white">
                     <table class="w-full text-sm text-left">
                         <thead class="bg-gray-50 text-gray-500 uppercase text-[10px]">
                             <tr>
                                 ${cols
-                                  .map(
-                                    (c) =>
-                                      `<th class="px-3 py-2 border-b font-bold tracking-wider">${c.header}</th>`
-                                  )
+                                  .map((c) => {
+                                    const header = c.config
+                                      ? c.config.label
+                                      : c.header;
+                                    return `<th class="px-3 py-2 border-b font-bold tracking-wider min-w-[120px]">${header}</th>`;
+                                  })
                                   .join("")}
                                 <th class="w-8 border-b"></th>
                             </tr>
                         </thead>
-                        <tbody>
-                            ${rowsHtml}
-                        </tbody>
+                        <tbody>${rowsHtml}</tbody>
                     </table>
                 </div>
-                
                 <button type="button" class="mt-2 text-blue-600 text-xs font-bold hover:text-blue-800 hover:underline add-row-btn flex items-center gap-1 transition">
                     <span class="bg-blue-100 text-blue-600 rounded-full w-4 h-4 flex items-center justify-center">+</span> Agregar Fila
                 </button>
@@ -198,44 +196,32 @@ export class TableElement extends BaseElement {
     const cells = cols
       .map((col) => {
         const elementStrategy = ElementRegistry.get(col.type);
-        // Renderizamos con contexto 'table' para inputs compactos
+        const header = col.config ? col.config.label : col.header;
+        const cellConfig = col.config || { label: header };
         const inputHtml = elementStrategy.renderEditor(
-          { label: col.header },
-          rowData[col.header] || "",
+          cellConfig,
+          rowData[header] || "",
           "table"
         );
-        return `<td class="p-1 border-b align-top bg-white" data-header="${col.header}">${inputHtml}</td>`;
+        return `<td class="p-1 border-b align-top bg-white" data-header="${header}">${inputHtml}</td>`;
       })
       .join("");
-    return `
-            <tr class="group hover:bg-blue-50/50 transition">
-                ${cells}
-                <td class="p-1 border-b text-center align-middle">
-                    <button type="button" class="text-gray-300 hover:text-red-500 delete-row-btn transition p-1 rounded hover:bg-red-50">×</button>
-                </td>
-            </tr>
-        `;
+    return `<tr class="group hover:bg-blue-50/50 transition">${cells}<td class="p-1 border-b text-center align-middle"><button type="button" class="text-gray-300 hover:text-red-500 delete-row-btn transition p-1 rounded hover:bg-red-50">×</button></td></tr>`;
   }
 
   attachListeners(container) {
-    // Agregar Fila
     container.querySelectorAll(".add-row-btn").forEach((btn) => {
       btn.onclick = (e) => {
         const wrapper = e.target.closest(".table-container");
         const tbody = wrapper.querySelector("tbody");
         const cols = JSON.parse(wrapper.dataset.cols);
-
         const tr = document.createElement("tr");
         tr.className = "group hover:bg-blue-50/50 transition animate-fade-in";
         tr.innerHTML = this.generateRowHtml(cols, {});
         tbody.appendChild(tr);
-
-        // Listener borrar para la nueva fila
         tr.querySelector(".delete-row-btn").onclick = () => tr.remove();
       };
     });
-
-    // Borrar Fila existente
     container.querySelectorAll(".delete-row-btn").forEach((btn) => {
       btn.onclick = (e) => e.target.closest("tr").remove();
     });
@@ -250,25 +236,24 @@ export class TableElement extends BaseElement {
         const input = td.querySelector("input, select, textarea");
         if (input) rowData[header] = input.value;
       });
-      // Filtrar filas vacías (opcional)
       if (Object.keys(rowData).length > 0) rows.push(rowData);
     });
     return rows;
   }
 
-  // --- IMPRESIÓN ---
   renderPrint(config, value) {
     if (!value || value.length === 0) return "";
     const cols = config.columns || [];
-
     const rowsHtml = value
       .map((row) => {
         const cells = cols
           .map((col) => {
             const elementStrategy = ElementRegistry.get(col.type);
+            const header = col.config ? col.config.label : col.header;
+            const cellConfig = col.config || { label: header };
             const val = elementStrategy.renderPrint(
-              { label: col.header },
-              row[col.header],
+              cellConfig,
+              row[header],
               "table"
             );
             return `<td class="border border-gray-300 p-2 align-top">${val}</td>`;
@@ -287,10 +272,12 @@ export class TableElement extends BaseElement {
                     <thead>
                         <tr class="bg-gray-100 text-gray-600">
                             ${cols
-                              .map(
-                                (c) =>
-                                  `<th class="border border-gray-300 p-2 text-left font-bold">${c.header}</th>`
-                              )
+                              .map((c) => {
+                                const header = c.config
+                                  ? c.config.label
+                                  : c.header;
+                                return `<th class="border border-gray-300 p-2 text-left font-bold">${header}</th>`;
+                              })
                               .join("")}
                         </tr>
                     </thead>
