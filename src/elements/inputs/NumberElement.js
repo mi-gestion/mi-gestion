@@ -5,21 +5,15 @@ export class NumberElement extends BaseInput {
     super("number", "#", "Numérico");
   }
 
-  // Se agrega este método para controlar la visualización (no edición)
   renderPrint(c, v, ctx) {
-    const val = v || "";
-
+    const val = v !== undefined && v !== null ? v : "";
     if (ctx === "table") {
-      // Alineación a la derecha específicamente para la tabla
       return `<div class="text-right">${val}</div>`;
     }
-
-    // Vista estándar para impresión o detalles (Layout vertical)
     return `<div><strong>${c.label}:</strong> ${val}</div>`;
   }
 
   renderEditor(c, v = "", ctx = "form") {
-    // Usamos type="text" y inputmode="decimal" para permitir fórmulas y teclado numérico en móviles
     const cls =
       ctx === "table"
         ? "w-full p-1 border rounded text-xs text-right focus:text-left transition-all"
@@ -34,11 +28,22 @@ export class NumberElement extends BaseInput {
     );
   }
 
-  attachListeners(container) {
+  // Helper para cálculo seguro
+  calculateSafe(expression) {
+    try {
+      // Solo permitimos números y operadores básicos
+      if (/[^0-9+\-*/().\s]/.test(expression)) return null;
+      return new Function("return " + expression)();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  attachListeners(container, onChange) {
     const input = container.querySelector(".math-input");
     if (!input) return;
 
-    // 1. Al presionar ENTER, quitamos el foco para activar el cálculo
+    // Al presionar ENTER, quitamos el foco para activar el cálculo
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
@@ -46,31 +51,37 @@ export class NumberElement extends BaseInput {
       }
     });
 
-    // 2. Al perder el foco: Evaluar operación y alinear a la derecha
+    // Al perder el foco: Calcular, formatear visualmente y guardar dato real
     input.addEventListener("blur", () => {
       const raw = input.value;
-      if (!raw) return;
+      if (!raw) {
+        if (typeof onChange === "function") onChange("");
+        return;
+      }
 
-      try {
-        // Permitimos solo caracteres seguros: números, operadores y puntos/comas
-        // Reemplazamos comas por puntos para JS
-        const expression = raw
-          .replace(/,/g, ".")
-          .replace(/[^0-9+\-*/().\s]/g, "");
+      // Normalizar (coma por punto)
+      const expression = raw.replace(/,/g, ".").trim();
 
-        // Si no hay operadores, no hacemos nada (es solo un número)
-        if (!/[+\-*/]/.test(expression)) return;
+      // Caso 1: Es solo un número
+      if (!isNaN(expression)) {
+        const val = parseFloat(expression);
+        input.value = val * 1; // Visual: quitar ceros innecesarios
+        if (typeof onChange === "function") onChange(val);
+        return;
+      }
 
-        // Evaluamos de forma segura
-        const result = new Function("return " + expression)();
+      // Caso 2: Es una fórmula
+      if (/[+\-*/]/.test(expression)) {
+        const result = this.calculateSafe(expression);
 
-        if (isFinite(result)) {
-          // Redondeamos a 2 decimales si es necesario y eliminamos decimales .00
-          input.value = parseFloat(result.toFixed(4)) * 1;
+        if (result !== null && isFinite(result)) {
+          const finalVal = parseFloat(result.toFixed(4));
+          input.value = finalVal * 1; // Actualizar DOM
+          if (typeof onChange === "function") onChange(finalVal); // Actualizar Estado
+        } else {
+          // Si la fórmula es inválida, no guardamos basura, o guardamos el texto raw si prefieres
+          // Por seguridad, mantenemos el valor previo en el estado si falla el cálculo
         }
-      } catch (e) {
-        // Si la fórmula está mal, dejamos el texto tal cual para que el usuario corrija
-        console.warn("Error en fórmula matemática", e);
       }
     });
   }

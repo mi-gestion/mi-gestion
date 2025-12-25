@@ -6,7 +6,6 @@ export class PercentageElement extends BaseInput {
   }
 
   renderEditor(c, v = "", ctx = "form") {
-    // En tabla input directo, en form con contenedor relativo
     if (ctx === "table") {
       return `<div class="relative">
              <input type="text" inputmode="decimal" class="w-full p-1 pr-4 border rounded text-xs text-right focus:text-left math-input" value="${v}" placeholder="0">
@@ -26,7 +25,7 @@ export class PercentageElement extends BaseInput {
     );
   }
 
-  attachListeners(container) {
+  attachListeners(container, onChange) {
     const input = container.querySelector(".math-input");
     if (!input) return;
 
@@ -39,18 +38,31 @@ export class PercentageElement extends BaseInput {
 
     input.addEventListener("blur", () => {
       const raw = input.value;
-      if (!raw) return;
-      try {
-        const expression = raw
-          .replace(/,/g, ".")
-          .replace(/[^0-9+\-*/().\s]/g, "");
-        if (!/[+\-*/]/.test(expression)) return;
+      if (!raw) {
+        if (typeof onChange === "function") onChange("");
+        return;
+      }
 
-        const result = new Function("return " + expression)();
-        if (isFinite(result)) {
-          input.value = parseFloat(result.toFixed(2));
-        }
-      } catch (e) {}
+      const expression = raw
+        .replace(/,/g, ".")
+        .replace(/[^0-9+\-*/().\s]/g, "");
+      let resultVal = null;
+
+      if (!isNaN(expression)) {
+        resultVal = parseFloat(expression);
+      } else if (/[+\-*/]/.test(expression)) {
+        try {
+          resultVal = new Function("return " + expression)();
+        } catch (e) {}
+      }
+
+      if (resultVal !== null && isFinite(resultVal)) {
+        // Visual
+        input.value = parseFloat(resultVal.toFixed(2));
+        // Estado
+        if (typeof onChange === "function")
+          onChange(parseFloat(resultVal.toFixed(2)));
+      }
     });
   }
 

@@ -1,16 +1,16 @@
 import { BaseElement } from "./BaseElement.js";
 import { ElementRegistry } from "./ElementRegistry.js";
 
-// --- UTILIDADES GLOBALES PARA EL DISEÑADOR (CONFIGURACIÓN DE PLANTILLA) ---
+// --- UTILIDADES GLOBALES PARA EL DISEÑADOR ---
 window.TableDesignerUtils = {
   getColsFromDOM: (id) => {
     const container = document.getElementById(`cols-list-${id}`);
-    if (!container) return [];
     const blocks = container.querySelectorAll(".table-col-block");
     return Array.from(blocks).map((block) => {
       const type = block.dataset.type;
       const strategy = ElementRegistry.get(type);
       const configArea = block.querySelector(".element-config-area");
+      // Sin validación: si strategy es null, esto explotará. Correcto.
       const config = strategy.extractConfig(configArea);
       return { type, config };
     });
@@ -22,11 +22,12 @@ window.TableDesignerUtils = {
     }
     return cols
       .map((col, idx) => {
+        // Sin validación: si col es null, explotará al acceder a col.type
         const strategy = ElementRegistry.get(col.type);
         const colId = `${id}-col-${idx}`;
         const innerTemplate = strategy.renderTemplate(
           colId,
-          col.config || {},
+          col.config, // Pasamos config directo
           "table"
         );
         return `
@@ -63,7 +64,6 @@ window.TableDesignerUtils = {
   renderCols: (id, cols) => {
     const list = document.getElementById(`cols-list-${id}`);
     const hiddenInput = document.getElementById(`columns-input-${id}`);
-    if (!list || !hiddenInput) return;
     hiddenInput.value = JSON.stringify(cols);
     list.innerHTML = window.TableDesignerUtils.getColsHtml(id, cols);
   },
@@ -86,136 +86,93 @@ window.TableDesignerUtils = {
   moveCol: (id, idx, dir) => {
     let cols = window.TableDesignerUtils.getColsFromDOM(id);
     const newIdx = idx + dir;
-    if (newIdx < 0 || newIdx >= cols.length) return;
     [cols[idx], cols[newIdx]] = [cols[newIdx], cols[idx]];
     window.TableDesignerUtils.renderCols(id, cols);
   },
 };
 
-// --- UTILIDADES GLOBALES PARA EL EDITOR (MODAL DE DATOS) ---
+// --- EDITOR MODAL (Sin validaciones defensivas) ---
 window.TableEditorUtils = {
-  activeContainer: null,
-  activeRow: null,
-  activeCols: [],
+  currentOnSave: null,
 
-  openModal: (btn, isEdit = false) => {
-    const container = btn.closest(".table-container");
-    window.TableEditorUtils.activeContainer = container;
-    window.TableEditorUtils.activeCols = JSON.parse(
-      container.dataset.cols || "[]"
-    );
-    window.TableEditorUtils.activeRow = isEdit ? btn.closest("tr") : null;
+  openModal: (colsConfig, initialData, onSave, title = "Editar Item") => {
+    window.TableEditorUtils.currentOnSave = onSave;
 
-    let currentValues = {};
-    if (isEdit && window.TableEditorUtils.activeRow) {
-      window.TableEditorUtils.activeRow
-        .querySelectorAll("td[data-header]")
-        .forEach((td) => {
-          const header = td.dataset.header;
-          const input = td.querySelector(
-            "input.real-value, textarea.real-value, select.real-value"
-          );
-          const storage = td.querySelector(".url-storage");
-
-          let val = "";
-          if (storage) val = storage.value;
-          else if (input) val = input.value;
-
-          currentValues[header] = val;
-        });
-    }
+    console.log("🛠️ [Modal] Data:", initialData);
+    console.log("🛠️ [Modal] Config:", colsConfig);
 
     const overlay = document.createElement("div");
     overlay.id = "table-editor-modal";
     overlay.className =
       "fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in";
 
-    const modalHtml = `
+    overlay.innerHTML = `
             <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
                 <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-2xl">
-                    <h3 class="font-bold text-gray-800 text-lg">
-                        ${isEdit ? "✏️ Editar Fila" : "➕ Agregar Nuevo Item"}
-                    </h3>
-                    <button onclick="document.getElementById('table-editor-modal').remove()" class="text-gray-400 hover:text-red-500 font-bold text-xl px-2">×</button>
+                    <h3 class="font-bold text-gray-800 text-lg">${title}</h3>
+                    <button id="modal-close-x" class="text-gray-400 hover:text-red-500 font-bold text-xl px-2">×</button>
                 </div>
-                
                 <div id="table-modal-form" class="p-6 overflow-y-auto space-y-5"></div>
-
                 <div class="p-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl flex justify-end gap-2">
-                    <button onclick="document.getElementById('table-editor-modal').remove()" class="px-4 py-2 text-sm font-bold text-gray-500 hover:bg-gray-200 rounded-xl">Cancelar</button>
-                    <button onclick="window.TableEditorUtils.saveData()" class="px-6 py-2 text-sm font-bold bg-blue-600 text-white rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200">
-                        ${isEdit ? "Guardar Cambios" : "Agregar Item"}
-                    </button>
+                    <button id="modal-cancel-btn" class="px-4 py-2 text-sm font-bold text-gray-500 hover:bg-gray-200 rounded-xl">Cancelar</button>
+                    <button id="modal-save-btn" class="px-6 py-2 text-sm font-bold bg-blue-600 text-white rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200">Guardar</button>
                 </div>
             </div>
         `;
-    overlay.innerHTML = modalHtml;
     document.body.appendChild(overlay);
 
     const formContainer = overlay.querySelector("#table-modal-form");
+    const tempState = { ...initialData };
 
-    window.TableEditorUtils.activeCols.forEach((col) => {
+    colsConfig.forEach((col, idx) => {
+      // Sin validación: Si col es undefined, esto explota.
       const strategy = ElementRegistry.get(col.type);
+
+      // Acceso directo a propiedades. Si col.config no existe, usamos fallback mínimo o explotará luego.
       const header = col.config ? col.config.label : col.header;
       const cellConfig = col.config || { label: header };
-      const val = currentValues[header] || "";
+      const val = initialData[header] !== undefined ? initialData[header] : "";
 
       const wrapper = document.createElement("div");
       wrapper.className = "table-modal-field";
-      wrapper.dataset.type = col.type;
-      wrapper.dataset.header = header;
-
       wrapper.innerHTML = strategy.renderEditor(cellConfig, val, "form");
       formContainer.appendChild(wrapper);
 
       if (strategy.attachListeners) {
-        strategy.attachListeners(wrapper);
+        strategy.attachListeners(wrapper, (newValue) => {
+          tempState[header] = newValue;
+        });
+      } else {
+        wrapper.addEventListener("input", (e) => {
+          if (e.target.matches("input, select, textarea")) {
+            tempState[header] = e.target.value;
+          }
+        });
       }
     });
-  },
 
-  saveData: () => {
-    const modal = document.getElementById("table-editor-modal");
-    const fields = modal.querySelectorAll(".table-modal-field");
-    const rowData = {};
+    const closeModal = () => {
+      document.getElementById("table-editor-modal").remove();
+      window.TableEditorUtils.currentOnSave = null;
+    };
 
-    fields.forEach((field) => {
-      const type = field.dataset.type;
-      const header = field.dataset.header;
-      const strategy = ElementRegistry.get(type);
-      const val = strategy.extractValue(field);
-      rowData[header] = val;
-    });
-
-    const tableEl = new TableElement();
-    const trHtml = tableEl.generateRowInnerHtml(
-      window.TableEditorUtils.activeCols,
-      rowData
-    );
-
-    if (window.TableEditorUtils.activeRow) {
-      window.TableEditorUtils.activeRow.innerHTML = trHtml;
-      tableEl.attachRowListeners(window.TableEditorUtils.activeRow);
-    } else {
-      const tbody =
-        window.TableEditorUtils.activeContainer.querySelector("tbody");
-      const tr = document.createElement("tr");
-      tr.className = "group hover:bg-blue-50/50 transition animate-fade-in";
-      tr.innerHTML = trHtml;
-      tbody.appendChild(tr);
-      tableEl.attachRowListeners(tr);
-    }
-    modal.remove();
+    overlay.querySelector("#modal-close-x").onclick = closeModal;
+    overlay.querySelector("#modal-cancel-btn").onclick = closeModal;
+    overlay.querySelector("#modal-save-btn").onclick = () => {
+      onSave(tempState); // Sin validación de tipo de función
+      closeModal();
+    };
   },
 };
 
-// --- CLASE DEL ELEMENTO TABLA ---
+// --- CLASE TABLE ELEMENT (Sin validaciones defensivas) ---
 
 export class TableElement extends BaseElement {
   constructor() {
     super("table", "▦", "Tabla Dinámica", "complex");
   }
 
+  // Configuración del Diseñador
   renderTemplate(id, data = {}) {
     const columns = data.columns || [];
     const columnsJson = JSON.stringify(columns).replace(/"/g, "&quot;");
@@ -264,6 +221,7 @@ export class TableElement extends BaseElement {
     const base = super.extractConfig(c);
     const designerDiv = c.querySelector(".table-designer");
     const id = designerDiv.dataset.id;
+    // Esto explotará si getColsFromDOM falla. Correcto.
     const currentCols = window.TableDesignerUtils.getColsFromDOM(id);
     return {
       ...base,
@@ -272,435 +230,358 @@ export class TableElement extends BaseElement {
     };
   }
 
-  // --- MODO EDITOR (DATOS) ---
-
+  // --- RENDERIZADO DEL EDITOR ---
   renderEditor(config, value = []) {
-    const cols = config.columns || [];
-    const rows = Array.isArray(value) ? value : [];
+    console.log(`🖼️ [TableElement] Render Config:`, config);
+    console.log(`🖼️ [TableElement] Render Value:`, value);
 
-    const rowsHtml = rows
-      .map((row) => {
-        const inner = this.generateRowInnerHtml(cols, row);
-        return `<tr class="group hover:bg-blue-50/50 transition">${inner}</tr>`;
+    const rows = Array.isArray(value) ? value : [];
+    const cols = config.columns; // Si config es null, explota aquí.
+    const colsConfigJson = JSON.stringify(cols).replace(/"/g, "&quot;");
+    const initialRowsJson = JSON.stringify(rows).replace(/"/g, "&quot;");
+
+    // Headers directos
+    const headersHtml = cols
+      .map((c, i) => {
+        // Acceso directo. Si c no tiene config, c.config.label explotará si c.config es undefined.
+        // Pero normalmente config existe aunque sea vacio. Si c es undefined, explota.
+        const header = c.config ? c.config.label : c.header;
+        const isNumeric = c.type === "number" || c.type === "currency";
+        const alignClass = isNumeric ? "text-right" : "text-left";
+        return `<th class="px-3 py-2 border-b font-bold tracking-wider min-w-[120px] whitespace-nowrap ${alignClass}">${header}</th>`;
       })
       .join("");
 
-    const colsConfigJson = JSON.stringify(cols).replace(/"/g, "&quot;");
-
-    const hasNumericCols = cols.some(
-      (c) => c.type === "number" || c.type === "currency"
-    );
-
+    // Footer
     let tfootHtml = "";
-    if (hasNumericCols) {
+    if (cols.some((c) => c.type === "number" || c.type === "currency")) {
       const footerCells = cols
         .map((c, idx) => {
           if (idx === 0 && c.type !== "number" && c.type !== "currency") {
             return `<th class="px-3 py-2 border-t-2 border-gray-300 bg-gray-50 text-left font-bold text-gray-600 uppercase text-[10px]">Totales</th>`;
           }
           if (c.type === "number" || c.type === "currency") {
-            return `<th class="px-3 py-2 border-t-2 border-gray-300 bg-gray-50 text-right font-bold text-blue-800 text-sm" data-total-col="${idx}" data-type="${
+            // Acceso directo a c.config.symbol
+            return `<th class="px-3 py-2 border-t-2 border-gray-300 bg-gray-50 text-right font-bold text-blue-800 text-sm js-total-col" data-col-index="${idx}" data-type="${
               c.type
-            }" data-symbol="${c.config?.symbol || ""}">-</th>`;
+            }" data-symbol="${c.config ? c.config.symbol : ""}">-</th>`;
           }
           return `<th class="px-3 py-2 border-t-2 border-gray-300 bg-gray-50"></th>`;
         })
         .join("");
       tfootHtml = `<tfoot><tr>${footerCells}<th class="border-t-2 border-gray-300 bg-gray-50"></th></tr></tfoot>`;
     }
-    // Se agrega data-label para facilitar la exportación CSV con nombre correcto
+
     return `
-            <div class="mb-8 table-container" data-cols="${colsConfigJson}" data-label="${
-      config.label || "Tabla"
-    }" id="container-${config.id}">
-                <div class="flex flex-wrap justify-between items-end mb-3 gap-2">
-                    <label class="block text-sm font-bold text-blue-800 uppercase tracking-wide">
-                        ${config.label}
+        <div class="mb-8 table-container" 
+             data-cols="${colsConfigJson}" 
+             data-label="${config.label || "Tabla"}" 
+             data-initial-value="${initialRowsJson}">
+            
+            <div class="flex flex-wrap justify-between items-end mb-3 gap-2">
+                <label class="block text-sm font-bold text-blue-800 uppercase tracking-wide">${
+                  config.label
+                }</label>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <div class="table-search-box hidden opacity-0 transition-all duration-300 relative">
+                         <input type="text" placeholder="Buscar..." class="pl-7 pr-2 py-1 border rounded-lg text-xs w-48 focus:w-64 outline-none bg-white">
+                         <span class="absolute left-2 top-1.5 text-gray-400 text-xs">🔍</span>
+                    </div>
+                    <span class="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full js-row-counter">0 items</span>
+                    <div class="h-4 w-px bg-gray-300 mx-1"></div>
+                    <label class="cursor-pointer text-gray-500 hover:text-green-600 transition" title="Importar CSV">
+                        <span class="text-lg">📥</span>
+                        <input type="file" accept=".csv" class="hidden js-import-csv">
                     </label>
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <div class="table-search-box hidden opacity-0 transition-all duration-300 relative">
-                             <input type="text" placeholder="Buscar (AND)..." class="pl-7 pr-2 py-1 border rounded-lg text-xs w-48 focus:w-64 focus:ring-2 focus:ring-blue-500 transition-all outline-none bg-white">
-                             <span class="absolute left-2 top-1.5 text-gray-400 text-xs">🔍</span>
-                        </div>
-                        
-                        <span class="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full table-row-counter">
-                            ${rows.length} items
-                        </span>
-
-                        <div class="h-4 w-px bg-gray-300 mx-1"></div>
-
-                        <label class="cursor-pointer text-gray-500 hover:text-green-600 transition" title="Importar CSV">
-                            <span class="text-lg">📥</span>
-                            <input type="file" accept=".csv" class="hidden table-import-csv">
-                        </label>
-                        <button type="button" class="text-gray-500 hover:text-blue-600 transition table-export-csv" title="Exportar CSV">
-                            <span class="text-lg">📤</span>
-                        </button>
-                    </div>
+                    <button type="button" class="text-gray-500 hover:text-blue-600 transition js-export-csv" title="Exportar CSV">
+                        <span class="text-lg">📤</span>
+                    </button>
                 </div>
-
-                <div class="overflow-x-auto border border-gray-200 rounded-lg shadow-sm bg-white relative">
-                    <table class="w-full text-sm text-left">
-                        <thead class="bg-gray-50 text-gray-500 uppercase text-[10px] sticky top-0 z-10">
-                            <tr>
-                                ${cols
-                                  .map((c) => {
-                                    const header = c.config
-                                      ? c.config.label
-                                      : c.header;
-                                    // ALINEACIÓN DE HEADER SEGÚN TIPO
-                                    const isNumeric =
-                                      c.type === "number" ||
-                                      c.type === "currency";
-                                    const alignClass = isNumeric
-                                      ? "text-right"
-                                      : "text-left";
-
-                                    return `<th class="px-3 py-2 border-b font-bold tracking-wider min-w-[120px] whitespace-nowrap ${alignClass}">${header}</th>`;
-                                  })
-                                  .join("")}
-                                <th class="w-24 border-b text-center font-bold text-gray-400 bg-gray-50">ACCIONES</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-100">${rowsHtml}</tbody>
-                        ${tfootHtml}
-                    </table>
-                    
-                    <div class="table-empty-state ${
-                      rows.length === 0 ? "" : "hidden"
-                    } p-8 text-center text-gray-400 italic bg-gray-50/50">
-                        No hay registros.
-                    </div>
-                </div>
-                
-                <button type="button" onclick="window.TableEditorUtils.openModal(this, false)" class="mt-2 text-blue-600 text-xs font-bold hover:text-blue-800 hover:underline flex items-center gap-1 transition">
-                    <span class="bg-blue-100 text-blue-600 rounded-full w-4 h-4 flex items-center justify-center">+</span> Agregar Fila
-                </button>
-            </div>`;
-  }
-
-  generateRowInnerHtml(cols, rowData = {}) {
-    const cells = cols
-      .map((col) => {
-        const elementStrategy = ElementRegistry.get(col.type);
-        const header = col.config ? col.config.label : col.header;
-        const cellConfig = col.config || { label: header };
-        const val = rowData[header] || "";
-
-        const displayHtml = elementStrategy.renderPrint(
-          cellConfig,
-          val,
-          "table"
-        );
-
-        let hiddenInput = "";
-        if (typeof val === "object") {
-          const jsonVal = JSON.stringify(val).replace(/"/g, "&quot;");
-          hiddenInput = `<input type="hidden" class="real-value url-storage" value="${jsonVal}">`;
-        } else {
-          hiddenInput = `<input type="hidden" class="real-value" value="${val
-            .toString()
-            .replace(/"/g, "&quot;")}">`;
-        }
-
-        return `<td class="p-2 border-b align-middle bg-white text-sm text-gray-700" data-header="${header}">
-            ${displayHtml}
-            ${hiddenInput}
-        </td>`;
-      })
-      .join("");
-
-    const actions = `
-        <td class="p-1 border-b text-center align-middle whitespace-nowrap">
-            <div class="flex items-center justify-center gap-1">
-                 <button type="button" class="move-row-up-btn text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition" title="Subir">↑</button>
-                <button type="button" class="move-row-down-btn text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition" title="Bajar">↓</button>
-                <div class="w-px h-4 bg-gray-200 mx-1"></div>
-                <button type="button" onclick="window.TableEditorUtils.openModal(this, true)" class="text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition" title="Editar Fila">✏️</button>
-                <button type="button" class="delete-row-btn text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition" title="Eliminar Fila">🗑️</button>
             </div>
-        </td>
-    `;
-    return cells + actions;
+
+            <div class="overflow-x-auto border border-gray-200 rounded-lg shadow-sm bg-white relative">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-gray-50 text-gray-500 uppercase text-[10px] sticky top-0 z-10">
+                        <tr>
+                            ${headersHtml}
+                            <th class="w-24 border-b text-center font-bold text-gray-400 bg-gray-50">ACCIONES</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 js-table-body"></tbody>
+                    ${tfootHtml}
+                </table>
+                <div class="js-empty-state p-8 text-center text-gray-400 italic bg-gray-50/50">Cargando datos...</div>
+            </div>
+            
+            <button type="button" class="mt-2 text-blue-600 text-xs font-bold hover:text-blue-800 hover:underline flex items-center gap-1 transition js-add-row-btn">
+                <span class="bg-blue-100 text-blue-600 rounded-full w-4 h-4 flex items-center justify-center">+</span> Agregar Fila
+            </button>
+        </div>`;
   }
 
-  attachRowListeners(tr) {
-    const delBtn = tr.querySelector(".delete-row-btn");
-    if (delBtn) {
-      delBtn.onclick = () => {
-        if (confirm("¿Eliminar esta fila?")) tr.remove();
-      };
+  // --- LÓGICA DE CONTROL ---
+  attachListeners(container, onChange) {
+    // CORRECCIÓN: Buscamos el elemento real que tiene la configuración
+    // El 'container' que llega es el wrapper del EditManager, no la tabla en sí.
+    const tableContainer = container.querySelector(".table-container");
+
+    // Protección: Si por alguna razón no se renderizó bien
+    if (!tableContainer) {
+      console.error(
+        "❌ [TableElement] No se encontró .table-container dentro del wrapper."
+      );
+      return;
     }
 
-    const upBtn = tr.querySelector(".move-row-up-btn");
-    if (upBtn) {
-      upBtn.onclick = () => {
-        const prev = tr.previousElementSibling;
-        if (prev) {
-          tr.parentNode.insertBefore(tr, prev);
-        }
-      };
-    }
+    // Ahora leemos del elemento correcto
+    // Si dataset.cols está mal formado, JSON.parse lanzará error (comportamiento deseado)
+    const colsConfig = JSON.parse(tableContainer.dataset.cols);
+    const rows = JSON.parse(tableContainer.dataset.initialValue);
 
-    const downBtn = tr.querySelector(".move-row-down-btn");
-    if (downBtn) {
-      downBtn.onclick = () => {
-        const next = tr.nextElementSibling;
-        if (next) {
-          tr.parentNode.insertBefore(next, tr);
-        }
-      };
-    }
-  }
+    console.log("⚡ [TableElement] Listeners Attached. Cols:", colsConfig);
 
-  attachListeners(container) {
-    const tbody = container.querySelector("tbody");
+    // Usamos tableContainer como referencia para buscar los elementos internos
+    const tbody = tableContainer.querySelector(".js-table-body");
+    const emptyState = tableContainer.querySelector(".js-empty-state");
+    const counter = tableContainer.querySelector(".js-row-counter");
+    const totalCells = tableContainer.querySelectorAll(".js-total-col");
 
-    container
-      .querySelectorAll("tbody tr")
-      .forEach((tr) => this.attachRowListeners(tr));
+    const renderTableRows = () => {
+      tbody.innerHTML = "";
 
-    const searchInput = container.querySelector(".table-search-box input");
-    const searchBox = container.querySelector(".table-search-box");
-
-    if (searchInput) {
-      searchInput.addEventListener("input", (e) => {
-        const terms = e.target.value.toLowerCase().split(/\s+/).filter(Boolean);
-        const rows = tbody.querySelectorAll("tr");
-        rows.forEach((row) => {
-          const text = row.textContent.toLowerCase();
-          const matches = terms.every((term) => text.includes(term));
-          row.style.display = matches ? "" : "none";
-        });
-        this.updateTotals(container);
-      });
-    }
-
-    const exportBtn = container.querySelector(".table-export-csv");
-    if (exportBtn) {
-      exportBtn.onclick = () => this.exportToCSV(container);
-    }
-
-    const importInput = container.querySelector(".table-import-csv");
-    if (importInput) {
-      importInput.onchange = (e) =>
-        this.importFromCSV(container, e.target.files[0]);
-    }
-
-    const observer = new MutationObserver(() => {
-      this.updateUIState(container, searchBox);
-      this.updateTotals(container);
-    });
-
-    if (tbody) {
-      observer.observe(tbody, { childList: true, subtree: true });
-    }
-
-    this.updateUIState(container, searchBox);
-    this.updateTotals(container);
-  }
-
-  updateUIState(container, searchBox) {
-    const rows = container.querySelectorAll("tbody tr");
-    const count = rows.length;
-
-    const counterEl = container.querySelector(".table-row-counter");
-    if (counterEl) counterEl.textContent = `${count} items`;
-
-    const emptyState = container.querySelector(".table-empty-state");
-    if (emptyState) {
-      emptyState.classList.toggle("hidden", count > 0);
-    }
-
-    if (searchBox) {
-      if (count > 10) {
-        searchBox.classList.remove("hidden", "opacity-0");
+      if (rows.length === 0) {
+        emptyState.classList.remove("hidden");
+        emptyState.textContent = "No hay registros.";
       } else {
-        const input = searchBox.querySelector("input");
-        if (!input.value) {
-          searchBox.classList.add("hidden", "opacity-0");
-        }
-      }
-    }
-  }
+        emptyState.classList.add("hidden");
 
-  updateTotals(container) {
-    const tfoot = container.querySelector("tfoot");
-    if (!tfoot) return;
-
-    const visibleRows = Array.from(
-      container.querySelectorAll("tbody tr")
-    ).filter((r) => r.style.display !== "none");
-    const footerCells = tfoot.querySelectorAll("th[data-total-col]");
-
-    footerCells.forEach((cell) => {
-      const colIdx = parseInt(cell.dataset.totalCol);
-      const type = cell.dataset.type;
-      const symbol = cell.dataset.symbol || "";
-
-      let sum = 0;
-      visibleRows.forEach((row) => {
-        const td = row.children[colIdx];
-        if (td) {
-          const input = td.querySelector(".real-value");
-          if (input) {
-            const val = parseFloat(input.value);
-            if (!isNaN(val)) sum += val;
-          }
-        }
-      });
-
-      if (type === "currency") {
-        cell.textContent = `${symbol} ${sum.toLocaleString("es-ES", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })}`;
-      } else {
-        cell.textContent = parseFloat(sum.toFixed(4)) * 1;
-      }
-    });
-  }
-
-  exportToCSV(container) {
-    container = document.getElementById(`container-${container.dataset.id}`);
-    const colsConfig = JSON.parse(container.dataset.cols || "[]");
-    const rows = Array.from(container.querySelectorAll("tbody tr"));
-    console.log(colsConfig);
-
-    if (rows.length === 0) return alert("No hay datos para exportar.");
-
-    // --- CORRECCIÓN DE ENCABEZADOS Y GENERACIÓN DE NOMBRE ---
-
-    // 1. Obtener datos para el nombre del archivo
-    // <plantilla> - <identificacion> - <label table>.csv
-    const templateNameEl = document.getElementById("template-name-display");
-    const templateName = templateNameEl
-      ? templateNameEl.textContent.trim()
-      : "Plantilla";
-
-    const docTitleEl = document.getElementById("doc-title");
-    const docTitle = docTitleEl ? docTitleEl.value.trim() : "Documento";
-
-    const tableLabel = container.dataset.label || "Tabla";
-
-    // Sanitizar nombre de archivo (remover caracteres inválidos)
-    const cleanFileName = `${templateName} - ${docTitle} - ${tableLabel}`
-      .replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ \-_]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    const finalFileName = `${cleanFileName}.csv`;
-
-    // 2. Generar Headers robustos
-    const headers = colsConfig.map((c) => {
-      // Priorizar config.label, luego header, luego un default
-      if (c.config && c.config.label) return c.config.label;
-      if (c.header) return c.header;
-      return "Columna";
-    });
-
-    const csvContent = [headers.join(",")];
-
-    rows.forEach((row) => {
-      const rowData = [];
-      row.querySelectorAll("td[data-header]").forEach((td) => {
-        const input = td.querySelector(".real-value, .url-storage");
-        let val = input ? input.value : "";
-        val = val.replace(/"/g, '""');
-        if (val.includes(",") || val.includes('"')) {
-          val = `"${val}"`;
-        }
-        rowData.push(val);
-      });
-      csvContent.push(rowData.join(","));
-    });
-
-    const blob = new Blob([csvContent.join("\n")], {
-      type: "text/csv;charset=utf-8;",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", finalFileName);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
-
-  importFromCSV(container, file) {
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target.result;
-      const lines = text.split("\n").filter((l) => l.trim() !== "");
-      if (lines.length < 2)
-        return alert("El archivo CSV parece vacío o inválido.");
-
-      const colsConfig = JSON.parse(container.dataset.cols || "[]");
-      const tbody = container.querySelector("tbody");
-
-      let addedCount = 0;
-      for (let i = 1; i < lines.length; i++) {
-        const cells = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
-
-        const cleanCells = cells.map((c) =>
-          c.replace(/^"|"$/g, "").replace(/""/g, '"')
-        );
-
-        if (cleanCells.length > 0) {
-          const rowData = {};
-          colsConfig.forEach((col, idx) => {
-            const header = col.config ? col.config.label : col.header;
-            rowData[header] = cleanCells[idx] || "";
-          });
-
-          const trHtml = this.generateRowInnerHtml(colsConfig, rowData);
+        rows.forEach((rowData, idx) => {
           const tr = document.createElement("tr");
           tr.className = "group hover:bg-blue-50/50 transition animate-fade-in";
-          tr.innerHTML = trHtml;
+
+          const cellsHtml = colsConfig
+            .map((col) => {
+              const strategy = ElementRegistry.get(col.type);
+              const header = col.config ? col.config.label : col.header;
+              const val = rowData[header];
+              const safeConfig = col.config || { label: header };
+
+              const displayHtml = strategy.renderPrint(
+                safeConfig,
+                val,
+                "table"
+              );
+              return `<td class="p-2 border-b align-middle bg-white text-sm text-gray-700">${displayHtml}</td>`;
+            })
+            .join("");
+
+          const actionsHtml = `
+                    <td class="p-1 border-b text-center align-middle whitespace-nowrap">
+                        <div class="flex items-center justify-center gap-1">
+                             <button type="button" class="text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition js-btn-up" title="Subir">↑</button>
+                            <button type="button" class="text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition js-btn-down" title="Bajar">↓</button>
+                            <div class="w-px h-4 bg-gray-200 mx-1"></div>
+                            <button type="button" class="text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition js-btn-edit" title="Editar">✏️</button>
+                            <button type="button" class="text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition js-btn-del" title="Eliminar">🗑️</button>
+                        </div>
+                    </td>
+                `;
+
+          tr.innerHTML = cellsHtml + actionsHtml;
           tbody.appendChild(tr);
-          this.attachRowListeners(tr);
-          addedCount++;
-        }
+
+          tr.querySelector(".js-btn-del").onclick = () =>
+            actions.deleteRow(idx);
+          tr.querySelector(".js-btn-edit").onclick = () => actions.editRow(idx);
+          tr.querySelector(".js-btn-up").onclick = () =>
+            actions.moveRow(idx, -1);
+          tr.querySelector(".js-btn-down").onclick = () =>
+            actions.moveRow(idx, 1);
+        });
       }
 
-      container.querySelector(".table-import-csv").value = "";
-      alert(`Se importaron ${addedCount} registros.`);
+      counter.textContent = `${rows.length} items`;
+      updateTotals();
     };
-    reader.readAsText(file);
-  }
 
-  extractValue(container) {
-    const rows = [];
-    container.querySelectorAll("tbody tr").forEach((tr) => {
-      const rowData = {};
-      tr.querySelectorAll("td[data-header]").forEach((td) => {
-        const header = td.dataset.header;
-        const input = td.querySelector(
-          "input.real-value, textarea.real-value, select.real-value"
-        );
-        const storage = td.querySelector(".url-storage");
+    const updateTotals = () => {
+      totalCells.forEach((cell) => {
+        const colIdx = parseInt(cell.dataset.colIndex);
+        const colConfig = colsConfig[colIdx];
+        const type = cell.dataset.type;
+        const symbol = cell.dataset.symbol || "";
+        const header = colConfig.config
+          ? colConfig.config.label
+          : colConfig.header;
 
-        if (storage) {
-          rowData[header] = storage.value;
-        } else if (input) {
-          rowData[header] = input.value;
+        const sum = rows.reduce((acc, row) => {
+          const val = parseFloat(row[header]);
+          return acc + (isNaN(val) ? 0 : val);
+        }, 0);
+
+        if (type === "currency") {
+          cell.textContent = `${symbol} ${sum.toLocaleString("es-ES", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}`;
+        } else {
+          cell.textContent = parseFloat(sum.toFixed(4)) * 1;
         }
       });
-      if (Object.keys(rowData).length > 0) rows.push(rowData);
-    });
-    return rows;
+    };
+
+    const notifyChange = () => {
+      onChange(rows);
+    };
+
+    const actions = {
+      addRow: () => {
+        window.TableEditorUtils.openModal(
+          colsConfig,
+          {},
+          (newItem) => {
+            rows.push(newItem);
+            renderTableRows();
+            notifyChange();
+          },
+          "Nuevo Item"
+        );
+      },
+      editRow: (idx) => {
+        const item = rows[idx];
+        window.TableEditorUtils.openModal(
+          colsConfig,
+          item,
+          (updatedItem) => {
+            rows[idx] = updatedItem;
+            renderTableRows();
+            notifyChange();
+          },
+          "Editar Item"
+        );
+      },
+      deleteRow: (idx) => {
+        if (confirm("¿Eliminar esta fila?")) {
+          rows.splice(idx, 1);
+          renderTableRows();
+          notifyChange();
+        }
+      },
+      moveRow: (idx, dir) => {
+        const newIdx = idx + dir;
+        if (newIdx >= 0 && newIdx < rows.length) {
+          [rows[idx], rows[newIdx]] = [rows[newIdx], rows[idx]];
+          renderTableRows();
+          notifyChange();
+        }
+      },
+      importCSV: (file) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const text = e.target.result;
+          const lines = text.split("\n").filter((l) => l.trim() !== "");
+
+          let added = 0;
+          for (let i = 1; i < lines.length; i++) {
+            const cells =
+              lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
+            const cleanCells = cells.map((c) =>
+              c.replace(/^"|"$/g, "").replace(/""/g, '"')
+            );
+
+            if (cleanCells.length > 0) {
+              const newItem = {};
+              colsConfig.forEach((col, cIdx) => {
+                const header = col.config ? col.config.label : col.header;
+                newItem[header] = cleanCells[cIdx] || "";
+              });
+              rows.push(newItem);
+              added++;
+            }
+          }
+          alert(`Importados ${added} items.`);
+          renderTableRows();
+          notifyChange();
+        };
+        reader.readAsText(file);
+      },
+      exportCSV: () => {
+        if (rows.length === 0) return alert("Nada que exportar.");
+
+        const headers = colsConfig.map((c) =>
+          c.config ? c.config.label : c.header
+        );
+        const csvRows = [headers.join(",")];
+
+        rows.forEach((row) => {
+          const rowCells = colsConfig.map((c) => {
+            const header = c.config ? c.config.label : c.header;
+            let val = row[header] || "";
+            val = String(val).replace(/"/g, '""');
+            if (val.includes(",") || val.includes('"')) val = `"${val}"`;
+            return val;
+          });
+          csvRows.push(rowCells.join(","));
+        });
+
+        const blob = new Blob([csvRows.join("\n")], {
+          type: "text/csv;charset=utf-8;",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${tableContainer.dataset.label || "export"}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      },
+    };
+
+    renderTableRows();
+
+    // Actualizamos los listeners para buscar dentro de tableContainer, no container
+    const addBtn = tableContainer.querySelector(".js-add-row-btn");
+    if (addBtn) addBtn.onclick = actions.addRow;
+
+    const importInput = tableContainer.querySelector(".js-import-csv");
+    if (importInput) {
+      importInput.onchange = (e) => {
+        if (e.target.files[0]) {
+          actions.importCSV(e.target.files[0]);
+          e.target.value = "";
+        }
+      };
+    }
+
+    const exportBtn = tableContainer.querySelector(".js-export-csv");
+    if (exportBtn) exportBtn.onclick = actions.exportCSV;
+
+    const searchInput = tableContainer.querySelector(".table-search-box input");
+    if (searchInput) {
+      searchInput.addEventListener("input", (e) => {
+        const term = e.target.value.toLowerCase();
+        const trs = tbody.querySelectorAll("tr");
+        trs.forEach((tr, i) => {
+          const text = Object.values(rows[i]).join(" ").toLowerCase();
+          tr.style.display = text.includes(term) ? "" : "none";
+        });
+      });
+    }
+  }
+
+  // extractValue Legacy - Devolvemos array vacio ya que EditManager usa el estado.
+  extractValue(container) {
+    return [];
   }
 
   renderPrint(config, value) {
     if (!value || value.length === 0) return "";
-    const cols = config.columns || [];
+    const cols = config.columns; // Si no hay columns, explota.
 
     let totals = {};
     cols.forEach((c) => {
       if (c.type === "number" || c.type === "currency")
-        totals[c.config?.label || c.header] = 0;
+        totals[c.config ? c.config.label : c.header] = 0;
     });
 
     const rowsHtml = value
@@ -741,7 +622,6 @@ export class TableElement extends BaseElement {
                                 const header = c.config
                                   ? c.config.label
                                   : c.header;
-                                // ALINEACIÓN HEADER IMPRESIÓN
                                 const isNumeric =
                                   c.type === "number" || c.type === "currency";
                                 const alignClass = isNumeric

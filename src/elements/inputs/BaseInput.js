@@ -115,8 +115,27 @@ export class BaseInput extends BaseElement {
                 }
             </div>`;
   }
-
+  /*
   extractValue(c) {
     return c.querySelector("input, textarea, select").value;
+  }
+    */
+  /**
+   * NUEVO MÉTODO ESTÁNDAR
+   * @param {HTMLElement} container - El wrapper del input
+   * @param {Function} onChange - Callback (val) => void para actualizar el estado
+   */
+  attachListeners(container, onChange) {
+    // Buscamos el elemento interactivo principal
+    const input = container.querySelector("input, textarea, select");
+    if (!input) return;
+
+    // Escuchamos eventos de cambio
+    // 'input' para tiempo real, 'change' para commit final (depende de UX deseada)
+    input.addEventListener("input", (e) => {
+      if (typeof onChange === "function") {
+        onChange(e.target.value);
+      }
+    });
   }
 }
