@@ -103,4 +103,10 @@ export class CurrencyElement extends BaseInput {
     }
     return `<div><strong>${c.label}:</strong> <span class="font-mono">${displayValue}</span></div>`;
   }
+  renderWhatsapp(c, v) {
+    const val = v === null || v === undefined || v === "" ? "---" : v;
+    const suffix = this.type === "percentage" ? "%" : "";
+    // Los tres backticks ``` crean el bloque de código
+    return `*${c.label}:* \`\`\`${val}${suffix}\`\`\`\n`;
+  }
 }

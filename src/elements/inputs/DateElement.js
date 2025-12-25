@@ -14,4 +14,8 @@ export class DateElement extends BaseInput {
   renderPrint(c, v, ctx) {
     return `<div><strong>${c.label}:</strong> ${v}</div>`;
   }
+  renderWhatsapp(c, v) {
+    const val = v || "---";
+    return `*${c.label}:* _${val}_\n`; // Cursiva para fechas
+  }
 }

@@ -85,4 +85,10 @@ export class NumberElement extends BaseInput {
       }
     });
   }
+  renderWhatsapp(c, v) {
+    const val = v === null || v === undefined || v === "" ? "---" : v;
+    const suffix = this.type === "percentage" ? "%" : "";
+    // Los tres backticks ``` crean el bloque de código
+    return `*${c.label}:* \`\`\`${val}${suffix}\`\`\`\n`;
+  }
 }

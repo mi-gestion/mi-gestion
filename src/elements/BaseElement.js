@@ -64,4 +64,14 @@ export class BaseElement {
     if (context === "table") return value;
     return `<div><strong>${config.label}:</strong> ${value}</div>`;
   }
+  /**
+   * NUEVO: Lógica de exportación a WhatsApp por defecto
+   * @param {Object} c - Configuración del campo (template)
+   * @param {any} v - Valor del campo
+   */
+  renderWhatsapp(c, v) {
+    // Manejo seguro de vacíos
+    const val = v === null || v === undefined || v === "" ? "---" : v;
+    return `*${c.label || this.label}:* ${val}\n`;
+  }
 }

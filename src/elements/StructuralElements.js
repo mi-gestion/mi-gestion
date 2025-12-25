@@ -45,6 +45,10 @@ export class ParagraphElement extends BaseElement {
   renderPrint(c) {
     return `<p class="mb-2 text-justify text-sm">${c.text}</p>`;
   }
+  renderWhatsapp(c, v) {
+    // Usamos cursiva para notas/párrafos explicativos
+    return `\n_${c.text}_\n`;
+  }
 }
 
 // Listas
@@ -79,6 +83,9 @@ export class ListElement extends BaseElement {
       .map((i) => `<li>${i}</li>`)
       .join("")}</ul>`;
   }
+  renderWhatsapp(c, v) {
+    return `\n📋\n ${(c.items || []).map((it) => `- ${it}\n`).join("")}\n`;
+  }
 }
 
 export class SectionElement extends BaseStructure {
@@ -91,6 +98,9 @@ export class SectionElement extends BaseStructure {
   renderPrint(c) {
     return `<h2 class="text-lg font-bold mt-6 mb-2 border-b border-gray-300 uppercase">${c.text}</h2>`;
   }
+  renderWhatsapp(c, v) {
+    return `\n🔹 *${c.text}* 🔹\n`;
+  }
 }
 export class TitleElement extends BaseStructure {
   constructor() {
@@ -102,6 +112,9 @@ export class TitleElement extends BaseStructure {
   renderPrint(c) {
     return `<h1 class="text-3xl font-bold text-center mb-6">${c.text}</h1>`;
   }
+  renderWhatsapp(c, v) {
+    return `\n👉 *${c.text.toUpperCase()}*\n`;
+  }
 }
 export class SubtitleElement extends BaseStructure {
   constructor() {
@@ -112,6 +125,9 @@ export class SubtitleElement extends BaseStructure {
   }
   renderPrint(c) {
     return `<h3 class="text-lg font-bold text-gray-700 mt-4 mb-2">${c.text}</h3>`;
+  }
+  renderWhatsapp(c, v) {
+    return `\n👉 *${c.text.toUpperCase()}*\n`;
   }
 }
 export class EnumListElement extends ListElement {
@@ -129,5 +145,10 @@ export class EnumListElement extends ListElement {
     return `<ol class="list-decimal pl-5 mb-2 text-sm">${(c.items || [])
       .map((i) => `<li>${i}</li>`)
       .join("")}</ol>`;
+  }
+  renderWhatsapp(c, v) {
+    return `\n📋\n ${(c.items || [])
+      .map((it, i) => `*${i + 1}.* ${it}\n`)
+      .join("")}\n`;
   }
 }

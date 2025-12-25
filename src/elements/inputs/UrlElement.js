@@ -205,6 +205,11 @@ export class UrlElement extends BaseInput {
     return { text: t, url: u };
   }
 
+  renderWhatsapp(c, v) {
+    if (!v) return `*${c.label}:* ---\n`;
+    return `*${c.label}:*\n _${v.text}_ ${v.url} \n`;
+  }
+
   // --- RENDERIZADO VISUAL (LECTURA/IMPRESIÓN) ---
   renderPrint(c, v, ctx) {
     const val = this.parseValue(v);

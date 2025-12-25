@@ -700,6 +700,24 @@ export class TableElement extends BaseElement {
     return [];
   }
 
+  renderWhatsapp(c, v) {
+    if (!Array.isArray(v) || v.length === 0) {
+      return `*${c.label}:* (Tabla vacía)\n`;
+    }
+
+    let out = `\n📋 *Tabla: ${c.label}*\n`;
+
+    v.forEach((row, index) => {
+      out += `  *#${index + 1}* ────────\n`;
+      // Iteramos las llaves del objeto fila
+      Object.entries(row).forEach(([key, val]) => {
+        out += `  - ${key}: ${val}\n`;
+      });
+    });
+
+    return out + `\n`;
+  }
+
   renderPrint(config, value) {
     if (!value || value.length === 0) return "";
     const cols = config.columns;

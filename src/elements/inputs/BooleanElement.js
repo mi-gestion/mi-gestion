@@ -11,4 +11,7 @@ export class BooleanElement extends BaseInput {
       ctx
     );
   }
+  renderWhatsapp(c, v) {
+    return `*${c.label}:* ${v ? "✅ Sí" : "❌ No"}\n`;
+  }
 }

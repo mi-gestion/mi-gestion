@@ -15,4 +15,9 @@ export class TextElement extends BaseInput {
       ctx
     );
   }
+  renderWhatsapp(c, v) {
+    if (!v) return `*${c.label}:* ---\n`;
+    // Usamos '>' para citar bloques de texto largo
+    return `*${c.label}:*\n> ${v.replace(/\n/g, "\n> ")}\n`;
+  }
 }
