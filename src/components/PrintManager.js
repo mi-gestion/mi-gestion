@@ -55,7 +55,7 @@ export class PrintManager {
                     .meta { color: #666; font-size: 0.8em; margin-bottom: 20px; border-bottom: 1px solid #eee; pb: 5px; }
                     table { border-collapse: collapse; width: 100%; }
                     
-                    /* Clases de Grid (Comunes para todos, el gap cambia según el modo) */
+                    /* Clases de Grid */
                     .print-grid { display: grid; grid-template-columns: repeat(8, 1fr); }
                     .print-col-span-1 { grid-column: span 1; }
                     .print-col-span-2 { grid-column: span 2; }
@@ -65,6 +65,11 @@ export class PrintManager {
                     .print-col-span-6 { grid-column: span 6; }
                     .print-col-span-7 { grid-column: span 7; }
                     .print-col-span-8 { grid-column: span 8; }
+
+                    /* --- CORRECCIÓN: Clases de Utilidad Multimedia (UrlElement) --- */
+                    /* En el iframe de impresión, SIEMPRE es modo impresión */
+                    .media-screen-only { display: none !important; }
+                    .media-print-only { display: block !important; }
 
                     /* Estilos Específicos del Modo */
                     ${styles}
@@ -77,6 +82,14 @@ export class PrintManager {
                     .border { border: 1px solid #ccc; }
                     .p-2 { padding: 0.5rem; }
                     .font-mono { font-family: monospace; }
+                    
+                    /* Utilidades de texto para UrlElement impreso */
+                    .text-gray-900 { color: #1a202c; }
+                    .text-gray-400 { color: #cbd5e0; }
+                    .text-\\[9px\\] { font-size: 9px; }
+                    .mt-0\\.5 { margin-top: 0.125rem; }
+                    .break-all { word-break: break-all; }
+                    .leading-tight { line-height: 1.25; }
                 </style>
             </head>
             <body>
@@ -110,11 +123,11 @@ export class PrintManager {
   }
 
   static getPrintStyles(mode) {
-    // 1. MODO COMPACTO: Reducimos márgenes y padding
+    // 1. MODO COMPACTO
     if (mode === "compact") {
       return `
             body { margin: 10px; padding: 0; font-size: 12px; }
-            .print-grid { gap: 4px; } /* Gap muy reducido */
+            .print-grid { gap: 4px; }
             .field-container { 
                 padding: 4px; 
                 border: 1px solid #eee; 
@@ -125,25 +138,25 @@ export class PrintManager {
             table th, table td { padding: 2px 4px; font-size: 11px; border: 1px solid #ddd; }
       `;
     }
-    // 2. MODO LECTURA FÁCIL: Márgenes reducidos (como compacta) PERO letra GRANDE
+    // 2. MODO LECTURA FÁCIL
     else if (mode === "easy") {
       return `
             body { margin: 10px; padding: 0; font-size: 18px; line-height: 1.4; }
-            .print-grid { gap: 8px; } /* Gap medio */
+            .print-grid { gap: 8px; }
             .field-container { 
                 padding: 8px; 
-                border-bottom: 1px solid #ccc; /* Solo líneas para limpiar ruido visual */
+                border-bottom: 1px solid #ccc;
             }
             h1 { font-size: 28px; }
             strong { color: #000; }
             table th, table td { padding: 8px; font-size: 16px; border: 1px solid #666; }
       `;
     }
-    // 3. MODO NORMAL: Tal cual se ve (Espaciado cómodo)
+    // 3. MODO NORMAL
     else {
       return `
             body { margin: 20px; padding: 20px; font-size: 14px; max-width: 1000px; margin-left: auto; margin-right: auto; }
-            .print-grid { gap: 20px; } /* Espaciado amplio estándar */
+            .print-grid { gap: 20px; }
             .field-container { 
                 padding: 15px; 
                 border: 1px solid #e2e8f0; 

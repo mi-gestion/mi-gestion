@@ -1,7 +1,7 @@
 import { BaseElement } from "./BaseElement.js";
 import { ElementRegistry } from "./ElementRegistry.js";
 
-// --- UTILIDADES GLOBALES PARA EL DISEÑADOR (Mantenemos igual) ---
+// --- UTILIDADES GLOBALES PARA EL DISEÑADOR (Se mantienen igual) ---
 window.TableDesignerUtils = {
   getColsFromDOM: (id) => {
     const container = document.getElementById(`cols-list-${id}`);
@@ -89,7 +89,7 @@ window.TableDesignerUtils = {
   },
 };
 
-// --- EDITOR MODAL (Mantenemos igual) ---
+// --- EDITOR MODAL (Se mantiene igual) ---
 window.TableEditorUtils = {
   currentOnSave: null,
 
@@ -267,7 +267,6 @@ export class TableElement extends BaseElement {
                 }</label>
                 
                 <div class="flex items-center gap-2 flex-wrap">
-                    
                     <div class="table-search-box hidden opacity-0 transition-all duration-300 relative">
                          <input type="text" placeholder="Buscar..." class="pl-7 pr-2 py-1 border rounded-lg text-xs w-48 focus:w-64 outline-none bg-white focus:ring-2 focus:ring-blue-200">
                          <span class="absolute left-2 top-1.5 text-gray-400 text-xs">🔍</span>
@@ -310,7 +309,7 @@ export class TableElement extends BaseElement {
   // --- LÓGICA DE CONTROL ---
   attachListeners(container, onChange) {
     const tableContainer = container.querySelector(".table-container");
-    if (!tableContainer) return; // Protección básica
+    if (!tableContainer) return;
 
     const colsConfig = JSON.parse(tableContainer.dataset.cols);
     const rows = JSON.parse(tableContainer.dataset.initialValue);
@@ -319,20 +318,14 @@ export class TableElement extends BaseElement {
     const emptyState = tableContainer.querySelector(".js-empty-state");
     const counter = tableContainer.querySelector(".js-row-counter");
     const totalCells = tableContainer.querySelectorAll(".js-total-col");
-
-    // Elementos del buscador
     const searchBox = tableContainer.querySelector(".table-search-box");
     const searchInput = tableContainer.querySelector(".table-search-box input");
 
-    // Función para renderizar filas (y controlar visibilidad buscador)
     const renderTableRows = () => {
       tbody.innerHTML = "";
-
-      // 1. CONTROL VISIBILIDAD BUSCADOR (> 10 items)
       if (rows.length > 10) {
         searchBox.classList.remove("hidden", "opacity-0");
       } else {
-        // Si hay texto escrito, no lo ocultamos de golpe para no molestar
         if (!searchInput.value) {
           searchBox.classList.add("hidden", "opacity-0");
         }
@@ -341,23 +334,19 @@ export class TableElement extends BaseElement {
       if (rows.length === 0) {
         emptyState.classList.remove("hidden");
         emptyState.textContent = "No hay registros.";
-        updateTotals([]); // Reset totales
+        updateTotals([]);
       } else {
         emptyState.classList.add("hidden");
-
-        // Si hay búsqueda activa, reaplicarla para pintar lo correcto
         if (searchInput && searchInput.value) {
           applySearch(searchInput.value);
         } else {
-          // Pintado normal de todas las filas
           rows.forEach((rowData, idx) => createRowDOM(rowData, idx));
-          updateTotals(rows); // Sumar todo
+          updateTotals(rows);
         }
       }
       counter.textContent = `${rows.length} items`;
     };
 
-    // Helper para crear el TR y sus listeners
     const createRowDOM = (rowData, idx) => {
       const tr = document.createElement("tr");
       tr.className = "group hover:bg-blue-50/50 transition animate-fade-in";
@@ -389,34 +378,24 @@ export class TableElement extends BaseElement {
       tr.innerHTML = cellsHtml + actionsHtml;
       tbody.appendChild(tr);
 
-      // Listeners de acción
       tr.querySelector(".js-btn-del").onclick = () => actions.deleteRow(idx);
       tr.querySelector(".js-btn-edit").onclick = () => actions.editRow(idx);
       tr.querySelector(".js-btn-up").onclick = () => actions.moveRow(idx, -1);
       tr.querySelector(".js-btn-down").onclick = () => actions.moveRow(idx, 1);
     };
 
-    // 2. LÓGICA DE BÚSQUEDA (AND + Filtro)
     const applySearch = (term) => {
-      const terms = term.toLowerCase().split(/\s+/).filter(Boolean); // Separar palabras
+      const terms = term.toLowerCase().split(/\s+/).filter(Boolean);
       const visibleRowsData = [];
-
-      // Limpiamos tbody para repintar ordenadamente solo lo visible
-      // (Podríamos usar display:none, pero repintar asegura consistencia de índices visuales si se necesitara)
-      // Mantenemos la lógica de display:none para rendimiento si son muchos items,
-      // pero aquí iteramos rows (datos) y generamos DOM.
-
       tbody.innerHTML = "";
 
       rows.forEach((row, idx) => {
         const text = Object.values(row).join(" ").toLowerCase();
-
-        // Lógica AND: Debe contener TODOS los términos
         const matches =
           terms.length === 0 || terms.every((t) => text.includes(t));
 
         if (matches) {
-          createRowDOM(row, idx); // Crear fila visible
+          createRowDOM(row, idx);
           visibleRowsData.push(row);
         }
       });
@@ -427,8 +406,6 @@ export class TableElement extends BaseElement {
       } else {
         emptyState.classList.add("hidden");
       }
-
-      // 3. TOTALES SOBRE VISIBLES
       updateTotals(visibleRowsData);
     };
 
@@ -503,53 +480,180 @@ export class TableElement extends BaseElement {
           notifyChange();
         }
       },
+      // --- IMPORTACIÓN INTELIGENTE (Reconstruye Objetos) ---
       importCSV: (file) => {
         const reader = new FileReader();
         reader.onload = (e) => {
           const text = e.target.result;
           const lines = text.split("\n").filter((l) => l.trim() !== "");
 
-          let added = 0;
-          for (let i = 1; i < lines.length; i++) {
-            const cells =
-              lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
-            const cleanCells = cells.map((c) =>
-              c.replace(/^"|"$/g, "").replace(/""/g, '"')
+          if (lines.length < 2)
+            return alert(
+              "El archivo CSV no tiene datos o encabezados válidos."
             );
 
-            if (cleanCells.length > 0) {
+          // Helper mejorado para parsear línea CSV (maneja comas dentro de comillas)
+          const parseLine = (line) => {
+            const result = [];
+            let current = "";
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+              const char = line[i];
+              if (char === '"') {
+                if (inQuotes && line[i + 1] === '"') {
+                  // Doble comilla escapada
+                  current += '"';
+                  i++;
+                } else {
+                  inQuotes = !inQuotes;
+                }
+              } else if (char === "," && !inQuotes) {
+                result.push(current.trim());
+                current = "";
+              } else {
+                current += char;
+              }
+            }
+            result.push(current.trim());
+            return result;
+          };
+
+          // 1. Mapear Encabezados del CSV
+          // headersMap: { "NombreColumna": index, "Nombre (prop)": index }
+          const csvHeaders = parseLine(lines[0]);
+          const headersMap = new Map();
+          csvHeaders.forEach((h, i) => headersMap.set(h, i));
+
+          let added = 0;
+
+          // 2. Procesar cada línea de datos
+          for (let i = 1; i < lines.length; i++) {
+            const cells = parseLine(lines[i]);
+
+            // Validar que la línea tenga contenido
+            if (cells.length > 0 && cells.some((c) => c)) {
               const newItem = {};
-              colsConfig.forEach((col, cIdx) => {
-                const header = col.config ? col.config.label : col.header;
-                newItem[header] = cleanCells[cIdx] || "";
+
+              // 3. Iterar sobre la configuración de columnas de NUESTRA tabla
+              colsConfig.forEach((col) => {
+                const configHeader = col.config ? col.config.label : col.header;
+
+                // CASO A: Coincidencia Exacta (Valor Simple)
+                if (headersMap.has(configHeader)) {
+                  const idx = headersMap.get(configHeader);
+                  // Limpiamos comillas extra si quedaron
+                  let val = cells[idx] || "";
+                  val = val.replace(/^"|"$/g, "");
+                  newItem[configHeader] = val;
+                }
+                // CASO B: Reconstrucción de Objeto (Buscamos columnas expandidas)
+                else {
+                  const objReconstructed = {};
+                  let foundProp = false;
+
+                  // Buscamos en los headers del CSV cualquier cosa que empiece con "Header ("
+                  csvHeaders.forEach((csvH, csvIdx) => {
+                    if (csvH.startsWith(`${configHeader} (`)) {
+                      // Extraer la clave: "Enlace (url)" -> "url"
+                      const propName = csvH.substring(
+                        configHeader.length + 2,
+                        csvH.length - 1
+                      );
+                      let val = cells[csvIdx] || "";
+                      val = val.replace(/^"|"$/g, "");
+
+                      objReconstructed[propName] = val;
+                      foundProp = true;
+                    }
+                  });
+
+                  if (foundProp) {
+                    newItem[configHeader] = objReconstructed;
+                  }
+                }
               });
-              rows.push(newItem);
-              added++;
+
+              // Solo agregamos si logramos reconstruir algún dato válido
+              if (Object.keys(newItem).length > 0) {
+                rows.push(newItem);
+                added++;
+              }
             }
           }
-          alert(`Importados ${added} items.`);
+
+          alert(`Importación completada: ${added} items añadidos.`);
           renderTableRows();
           notifyChange();
         };
         reader.readAsText(file);
       },
+      // --- EXPORTACIÓN (Ya configurada para aplanar objetos) ---
       exportCSV: () => {
         if (rows.length === 0) return alert("Nada que exportar.");
 
-        const headers = colsConfig.map((c) =>
-          c.config ? c.config.label : c.header
-        );
-        const csvRows = [headers.join(",")];
+        const escapeCSV = (val) => {
+          let str = String(val === null || val === undefined ? "" : val);
+          str = str.replace(/"/g, '""');
+          if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+            return `"${str}"`;
+          }
+          return str;
+        };
+
+        const objectColsMap = new Map();
 
         rows.forEach((row) => {
-          const rowCells = colsConfig.map((c) => {
-            const header = c.config ? c.config.label : c.header;
-            let val = row[header] || "";
-            val = String(val).replace(/"/g, '""');
-            if (val.includes(",") || val.includes('"')) val = `"${val}"`;
-            return val;
+          colsConfig.forEach((col, colIdx) => {
+            const header = col.config ? col.config.label : col.header;
+            const val = row[header];
+            if (
+              typeof val === "object" &&
+              val !== null &&
+              !Array.isArray(val)
+            ) {
+              if (!objectColsMap.has(colIdx)) {
+                objectColsMap.set(colIdx, new Set());
+              }
+              Object.keys(val).forEach((key) =>
+                objectColsMap.get(colIdx).add(key)
+              );
+            }
           });
-          csvRows.push(rowCells.join(","));
+        });
+
+        let flatHeaders = [];
+        const colInfoMap = new Map();
+
+        colsConfig.forEach((col, colIdx) => {
+          const baseHeader = col.config ? col.config.label : col.header;
+          if (objectColsMap.has(colIdx)) {
+            const keys = Array.from(objectColsMap.get(colIdx));
+            keys.forEach((key) => {
+              flatHeaders.push(escapeCSV(`${baseHeader} (${key})`));
+            });
+            colInfoMap.set(colIdx, { baseHeader, keys });
+          } else {
+            flatHeaders.push(escapeCSV(baseHeader));
+          }
+        });
+
+        const csvRows = [flatHeaders.join(",")];
+
+        rows.forEach((row) => {
+          let flatRow = [];
+          colsConfig.forEach((col, colIdx) => {
+            if (objectColsMap.has(colIdx)) {
+              const { baseHeader, keys } = colInfoMap.get(colIdx);
+              const objValue = row[baseHeader] || {};
+              keys.forEach((key) => {
+                flatRow.push(escapeCSV(objValue[key]));
+              });
+            } else {
+              const header = col.config ? col.config.label : col.header;
+              flatRow.push(escapeCSV(row[header]));
+            }
+          });
+          csvRows.push(flatRow.join(","));
         });
 
         const blob = new Blob([csvRows.join("\n")], {
@@ -567,7 +671,6 @@ export class TableElement extends BaseElement {
 
     renderTableRows();
 
-    // Listeners del DOM
     if (tableContainer.querySelector(".js-add-row-btn")) {
       tableContainer.querySelector(".js-add-row-btn").onclick = actions.addRow;
     }
