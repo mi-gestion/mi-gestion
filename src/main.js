@@ -22,6 +22,7 @@ import { TemplateEditor } from "./components/TemplateEditor.js";
 // NUEVOS COMPONENTES
 import { EditManager } from "./components/EditManager.js";
 import { ViewManager } from "./components/ViewManager.js";
+import { SettingsManager } from "./components/SettingsManager.js";
 
 // --- ESTADO GLOBAL ---
 let currentUser = null;
@@ -144,6 +145,41 @@ async function deleteItem(collectionName, id) {
   }
 }
 
+// 2. FUNCIÓN NUEVA: renderSettings()
+function renderSettings() {
+  app.innerHTML = "";
+
+  // Navbar...
+  const nav = new Navbar(/* ... argumentos existentes ... */);
+  app.appendChild(nav.render());
+
+  const sm = new SettingsManager({
+    currentUser: currentUser,
+    vaultKey: vaultKey, // Llave Nivel 2
+    userKey: userKey, // Llave Nivel 1 (CRÍTICA para el cambio de password)
+    allSecrets: allSecrets,
+
+    // Callback cuando cambia la frase maestra
+    onVaultKeyChange: (newKey) => {
+      vaultKey = newKey;
+      console.log("🔑 Llave Bóveda actualizada.");
+    },
+
+    // NUEVO: Callback cuando cambia el password de Login
+    onUserKeyChange: (newKey) => {
+      userKey = newKey;
+      console.log("🔑 Llave Usuario actualizada.");
+    },
+
+    onClose: () => {
+      appMode = "documents";
+      renderDashboard();
+    },
+  });
+
+  app.appendChild(sm.render());
+}
+
 // --- RENDERIZADO PRINCIPAL (DASHBOARD) ---
 
 function renderDashboard() {
@@ -165,7 +201,8 @@ function renderDashboard() {
       appMode = "documents";
       currentCategory = "all";
       renderDashboard();
-    }
+    },
+    () => renderSettings()
   );
   app.appendChild(nav.render());
 

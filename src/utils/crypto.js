@@ -63,4 +63,16 @@ export class CryptoManager {
     console.log("✅ [Crypto] Descifrado exitoso.");
     return new TextDecoder().decode(decrypted);
   }
+
+  async updatePassphrase(newPhrase) {
+    // Lógica para derivar la nueva clave (PBKDF2)
+    const newKey = await deriveKeyFromPhrase(newPhrase); // Función interna que ya debes tener
+
+    // Actualizar la variable interna donde guardas la clave (cryptoKey)
+    state.cryptoKey = newKey;
+
+    // Importante: No guardamos nada en Firebase aquí,
+    // el guardado ocurre cuando StateManager llama a saveUserData usando esta nueva key.
+    return true;
+  }
 }

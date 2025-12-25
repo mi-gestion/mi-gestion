@@ -232,7 +232,7 @@ export class UrlElement extends BaseInput {
                 class="media-screen-only inline-flex items-center gap-1.5 px-3 py-1.5 bg-pink-50 text-pink-700 hover:bg-pink-100 hover:text-pink-900 border border-pink-200 rounded-full transition group"
                 onclick="window.MediaViewer.playAudio('${safeUrl}', '${safeTitle}')">
                 <span class="text-sm group-hover:scale-110 transition-transform">🎵</span>
-                <span class="text-xs font-bold">Reproducir ${displayText}</span>
+                <span class="text-xs font-bold">${displayText}</span>
             </button>
         `;
     }
@@ -243,7 +243,7 @@ export class UrlElement extends BaseInput {
                 class="media-screen-only inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:text-purple-900 border border-purple-200 rounded-full transition group"
                 onclick="window.MediaViewer.showImage('${safeUrl}', '${safeTitle}')">
                 <span class="text-sm group-hover:scale-110 transition-transform">🖼️</span>
-                <span class="text-xs font-bold">Ver ${displayText}</span>
+                <span class="text-xs font-bold">${displayText}</span>
             </button>
         `;
     }
