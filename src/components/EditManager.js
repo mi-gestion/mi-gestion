@@ -33,6 +33,7 @@ export class EditManager {
     const initialTitle = isEditing ? this.existingSecret.title : "";
     const initialLevel = isEditing ? this.existingSecret.level : "1";
 
+    // SE AGREGA id="template-name-display" PARA EXPORTACIÓN CSV
     container.innerHTML = `
             <div class="flex items-center justify-between mb-6 pb-4 border-b border-gray-100 relative z-0">
                 <div class="flex items-center gap-4 w-full">
@@ -40,7 +41,7 @@ export class EditManager {
                     <div class="flex-1">
                         <div class="flex items-center gap-2 text-sm text-gray-500 mb-1">
                             <span class="text-xl">${templateIcon}</span>
-                            <span class="uppercase tracking-wider font-bold text-xs text-blue-600">${templateName}</span>
+                            <span id="template-name-display" class="uppercase tracking-wider font-bold text-xs text-blue-600">${templateName}</span>
                             <span class="text-xs">• ${
                               isEditing ? "Editando" : "Nuevo"
                             }</span>

@@ -5,6 +5,19 @@ export class NumberElement extends BaseInput {
     super("number", "#", "Numérico");
   }
 
+  // Se agrega este método para controlar la visualización (no edición)
+  renderPrint(c, v, ctx) {
+    const val = v || "";
+
+    if (ctx === "table") {
+      // Alineación a la derecha específicamente para la tabla
+      return `<div class="text-right">${val}</div>`;
+    }
+
+    // Vista estándar para impresión o detalles (Layout vertical)
+    return `<div><strong>${c.label}:</strong> ${val}</div>`;
+  }
+
   renderEditor(c, v = "", ctx = "form") {
     // Usamos type="text" y inputmode="decimal" para permitir fórmulas y teclado numérico en móviles
     const cls =

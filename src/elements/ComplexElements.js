@@ -112,11 +112,10 @@ window.TableEditorUtils = {
         .querySelectorAll("td[data-header]")
         .forEach((td) => {
           const header = td.dataset.header;
-          // Buscamos el valor real en el input hidden o storage
           const input = td.querySelector(
             "input.real-value, textarea.real-value, select.real-value"
           );
-          const storage = td.querySelector(".url-storage"); // Caso especial URL
+          const storage = td.querySelector(".url-storage");
 
           let val = "";
           if (storage) val = storage.value;
@@ -166,7 +165,6 @@ window.TableEditorUtils = {
       wrapper.dataset.type = col.type;
       wrapper.dataset.header = header;
 
-      // Renderizamos SIEMPRE en modo FORM (Formato Rico)
       wrapper.innerHTML = strategy.renderEditor(cellConfig, val, "form");
       formContainer.appendChild(wrapper);
 
@@ -289,30 +287,91 @@ export class TableElement extends BaseElement {
 
     const colsConfigJson = JSON.stringify(cols).replace(/"/g, "&quot;");
 
+    const hasNumericCols = cols.some(
+      (c) => c.type === "number" || c.type === "currency"
+    );
+
+    let tfootHtml = "";
+    if (hasNumericCols) {
+      const footerCells = cols
+        .map((c, idx) => {
+          if (idx === 0 && c.type !== "number" && c.type !== "currency") {
+            return `<th class="px-3 py-2 border-t-2 border-gray-300 bg-gray-50 text-left font-bold text-gray-600 uppercase text-[10px]">Totales</th>`;
+          }
+          if (c.type === "number" || c.type === "currency") {
+            return `<th class="px-3 py-2 border-t-2 border-gray-300 bg-gray-50 text-right font-bold text-blue-800 text-sm" data-total-col="${idx}" data-type="${
+              c.type
+            }" data-symbol="${c.config?.symbol || ""}">-</th>`;
+          }
+          return `<th class="px-3 py-2 border-t-2 border-gray-300 bg-gray-50"></th>`;
+        })
+        .join("");
+      tfootHtml = `<tfoot><tr>${footerCells}<th class="border-t-2 border-gray-300 bg-gray-50"></th></tr></tfoot>`;
+    }
+
+    // Se agrega data-label para facilitar la exportación CSV con nombre correcto
     return `
-            <div class="mb-8 table-container" data-cols="${colsConfigJson}">
-                <div class="flex justify-between items-end mb-2">
-                    <label class="block text-sm font-bold text-blue-800 uppercase tracking-wide">${
-                      config.label
-                    }</label>
+            <div class="mb-8 table-container" data-cols="${colsConfigJson}" data-label="${
+      config.label || "Tabla"
+    }">
+                <div class="flex flex-wrap justify-between items-end mb-3 gap-2">
+                    <label class="block text-sm font-bold text-blue-800 uppercase tracking-wide">
+                        ${config.label}
+                    </label>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <div class="table-search-box hidden opacity-0 transition-all duration-300 relative">
+                             <input type="text" placeholder="Buscar (AND)..." class="pl-7 pr-2 py-1 border rounded-lg text-xs w-48 focus:w-64 focus:ring-2 focus:ring-blue-500 transition-all outline-none bg-white">
+                             <span class="absolute left-2 top-1.5 text-gray-400 text-xs">🔍</span>
+                        </div>
+                        
+                        <span class="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full table-row-counter">
+                            ${rows.length} items
+                        </span>
+
+                        <div class="h-4 w-px bg-gray-300 mx-1"></div>
+
+                        <label class="cursor-pointer text-gray-500 hover:text-green-600 transition" title="Importar CSV">
+                            <span class="text-lg">📥</span>
+                            <input type="file" accept=".csv" class="hidden table-import-csv">
+                        </label>
+                        <button type="button" class="text-gray-500 hover:text-blue-600 transition table-export-csv" title="Exportar CSV">
+                            <span class="text-lg">📤</span>
+                        </button>
+                    </div>
                 </div>
-                <div class="overflow-x-auto border border-gray-200 rounded-lg shadow-sm bg-white">
+
+                <div class="overflow-x-auto border border-gray-200 rounded-lg shadow-sm bg-white relative">
                     <table class="w-full text-sm text-left">
-                        <thead class="bg-gray-50 text-gray-500 uppercase text-[10px]">
+                        <thead class="bg-gray-50 text-gray-500 uppercase text-[10px] sticky top-0 z-10">
                             <tr>
                                 ${cols
                                   .map((c) => {
                                     const header = c.config
                                       ? c.config.label
                                       : c.header;
-                                    return `<th class="px-3 py-2 border-b font-bold tracking-wider min-w-[120px] whitespace-nowrap">${header}</th>`;
+                                    // ALINEACIÓN DE HEADER SEGÚN TIPO
+                                    const isNumeric =
+                                      c.type === "number" ||
+                                      c.type === "currency";
+                                    const alignClass = isNumeric
+                                      ? "text-right"
+                                      : "text-left";
+
+                                    return `<th class="px-3 py-2 border-b font-bold tracking-wider min-w-[120px] whitespace-nowrap ${alignClass}">${header}</th>`;
                                   })
                                   .join("")}
-                                <th class="w-24 border-b text-center font-bold text-gray-400">ACCIONES</th>
+                                <th class="w-24 border-b text-center font-bold text-gray-400 bg-gray-50">ACCIONES</th>
                             </tr>
                         </thead>
-                        <tbody>${rowsHtml}</tbody>
+                        <tbody class="divide-y divide-gray-100">${rowsHtml}</tbody>
+                        ${tfootHtml}
                     </table>
+                    
+                    <div class="table-empty-state ${
+                      rows.length === 0 ? "" : "hidden"
+                    } p-8 text-center text-gray-400 italic bg-gray-50/50">
+                        No hay registros.
+                    </div>
                 </div>
                 
                 <button type="button" onclick="window.TableEditorUtils.openModal(this, false)" class="mt-2 text-blue-600 text-xs font-bold hover:text-blue-800 hover:underline flex items-center gap-1 transition">
@@ -329,20 +388,14 @@ export class TableElement extends BaseElement {
         const cellConfig = col.config || { label: header };
         const val = rowData[header] || "";
 
-        // 1. VISUALIZACIÓN LIMPIA: Usamos renderPrint con contexto 'table'
-        // Esto genera texto formateado (ej: "$ 100.00") en lugar de un input
         const displayHtml = elementStrategy.renderPrint(
           cellConfig,
           val,
           "table"
         );
 
-        // 2. INPUT OCULTO: Para guardar el valor real y que extractValue funcione
-        // Marcamos con clase .real-value para que el modal lo encuentre fácil
-        // Manejamos caso URL (Objeto) vs Valor Simple
         let hiddenInput = "";
         if (typeof val === "object") {
-          // Caso complejo (ej: UrlElement guarda JSON)
           const jsonVal = JSON.stringify(val).replace(/"/g, "&quot;");
           hiddenInput = `<input type="hidden" class="real-value url-storage" value="${jsonVal}">`;
         } else {
@@ -361,19 +414,11 @@ export class TableElement extends BaseElement {
     const actions = `
         <td class="p-1 border-b text-center align-middle whitespace-nowrap">
             <div class="flex items-center justify-center gap-1">
-                 <button type="button" class="move-row-up-btn text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition" title="Subir">
-                    ↑
-                </button>
-                <button type="button" class="move-row-down-btn text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition" title="Bajar">
-                    ↓
-                </button>
+                 <button type="button" class="move-row-up-btn text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition" title="Subir">↑</button>
+                <button type="button" class="move-row-down-btn text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition" title="Bajar">↓</button>
                 <div class="w-px h-4 bg-gray-200 mx-1"></div>
-                <button type="button" onclick="window.TableEditorUtils.openModal(this, true)" class="text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition" title="Editar Fila">
-                    ✏️
-                </button>
-                <button type="button" class="delete-row-btn text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition" title="Eliminar Fila">
-                    🗑️
-                </button>
+                <button type="button" onclick="window.TableEditorUtils.openModal(this, true)" class="text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition" title="Editar Fila">✏️</button>
+                <button type="button" class="delete-row-btn text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition" title="Eliminar Fila">🗑️</button>
             </div>
         </td>
     `;
@@ -410,9 +455,219 @@ export class TableElement extends BaseElement {
   }
 
   attachListeners(container) {
+    const tbody = container.querySelector("tbody");
+
     container
       .querySelectorAll("tbody tr")
       .forEach((tr) => this.attachRowListeners(tr));
+
+    const searchInput = container.querySelector(".table-search-box input");
+    const searchBox = container.querySelector(".table-search-box");
+
+    if (searchInput) {
+      searchInput.addEventListener("input", (e) => {
+        const terms = e.target.value.toLowerCase().split(/\s+/).filter(Boolean);
+        const rows = tbody.querySelectorAll("tr");
+        rows.forEach((row) => {
+          const text = row.textContent.toLowerCase();
+          const matches = terms.every((term) => text.includes(term));
+          row.style.display = matches ? "" : "none";
+        });
+        this.updateTotals(container);
+      });
+    }
+
+    const exportBtn = container.querySelector(".table-export-csv");
+    if (exportBtn) {
+      exportBtn.onclick = () => this.exportToCSV(container);
+    }
+
+    const importInput = container.querySelector(".table-import-csv");
+    if (importInput) {
+      importInput.onchange = (e) =>
+        this.importFromCSV(container, e.target.files[0]);
+    }
+
+    const observer = new MutationObserver(() => {
+      this.updateUIState(container, searchBox);
+      this.updateTotals(container);
+    });
+
+    if (tbody) {
+      observer.observe(tbody, { childList: true, subtree: true });
+    }
+
+    this.updateUIState(container, searchBox);
+    this.updateTotals(container);
+  }
+
+  updateUIState(container, searchBox) {
+    const rows = container.querySelectorAll("tbody tr");
+    const count = rows.length;
+
+    const counterEl = container.querySelector(".table-row-counter");
+    if (counterEl) counterEl.textContent = `${count} items`;
+
+    const emptyState = container.querySelector(".table-empty-state");
+    if (emptyState) {
+      emptyState.classList.toggle("hidden", count > 0);
+    }
+
+    if (searchBox) {
+      if (count > 10) {
+        searchBox.classList.remove("hidden", "opacity-0");
+      } else {
+        const input = searchBox.querySelector("input");
+        if (!input.value) {
+          searchBox.classList.add("hidden", "opacity-0");
+        }
+      }
+    }
+  }
+
+  updateTotals(container) {
+    const tfoot = container.querySelector("tfoot");
+    if (!tfoot) return;
+
+    const visibleRows = Array.from(
+      container.querySelectorAll("tbody tr")
+    ).filter((r) => r.style.display !== "none");
+    const footerCells = tfoot.querySelectorAll("th[data-total-col]");
+
+    footerCells.forEach((cell) => {
+      const colIdx = parseInt(cell.dataset.totalCol);
+      const type = cell.dataset.type;
+      const symbol = cell.dataset.symbol || "";
+
+      let sum = 0;
+      visibleRows.forEach((row) => {
+        const td = row.children[colIdx];
+        if (td) {
+          const input = td.querySelector(".real-value");
+          if (input) {
+            const val = parseFloat(input.value);
+            if (!isNaN(val)) sum += val;
+          }
+        }
+      });
+
+      if (type === "currency") {
+        cell.textContent = `${symbol} ${sum.toLocaleString("es-ES", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`;
+      } else {
+        cell.textContent = parseFloat(sum.toFixed(4)) * 1;
+      }
+    });
+  }
+
+  exportToCSV(container) {
+    const colsConfig = JSON.parse(container.dataset.cols || "[]");
+    const rows = Array.from(container.querySelectorAll("tbody tr"));
+
+    if (rows.length === 0) return alert("No hay datos para exportar.");
+
+    // --- CORRECCIÓN DE ENCABEZADOS Y GENERACIÓN DE NOMBRE ---
+
+    // 1. Obtener datos para el nombre del archivo
+    // <plantilla> - <identificacion> - <label table>.csv
+    const templateNameEl = document.getElementById("template-name-display");
+    const templateName = templateNameEl
+      ? templateNameEl.textContent.trim()
+      : "Plantilla";
+
+    const docTitleEl = document.getElementById("doc-title");
+    const docTitle = docTitleEl ? docTitleEl.value.trim() : "Documento";
+
+    const tableLabel = container.dataset.label || "Tabla";
+
+    // Sanitizar nombre de archivo (remover caracteres inválidos)
+    const cleanFileName = `${templateName} - ${docTitle} - ${tableLabel}`
+      .replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ \-_]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const finalFileName = `${cleanFileName}.csv`;
+
+    // 2. Generar Headers robustos
+    const headers = colsConfig.map((c) => {
+      // Priorizar config.label, luego header, luego un default
+      if (c.config && c.config.label) return c.config.label;
+      if (c.header) return c.header;
+      return "Columna";
+    });
+
+    const csvContent = [headers.join(",")];
+
+    rows.forEach((row) => {
+      const rowData = [];
+      row.querySelectorAll("td[data-header]").forEach((td) => {
+        const input = td.querySelector(".real-value, .url-storage");
+        let val = input ? input.value : "";
+        val = val.replace(/"/g, '""');
+        if (val.includes(",") || val.includes('"')) {
+          val = `"${val}"`;
+        }
+        rowData.push(val);
+      });
+      csvContent.push(rowData.join(","));
+    });
+
+    const blob = new Blob([csvContent.join("\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", finalFileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  importFromCSV(container, file) {
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const lines = text.split("\n").filter((l) => l.trim() !== "");
+      if (lines.length < 2)
+        return alert("El archivo CSV parece vacío o inválido.");
+
+      const colsConfig = JSON.parse(container.dataset.cols || "[]");
+      const tbody = container.querySelector("tbody");
+
+      let addedCount = 0;
+      for (let i = 1; i < lines.length; i++) {
+        const cells = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
+
+        const cleanCells = cells.map((c) =>
+          c.replace(/^"|"$/g, "").replace(/""/g, '"')
+        );
+
+        if (cleanCells.length > 0) {
+          const rowData = {};
+          colsConfig.forEach((col, idx) => {
+            const header = col.config ? col.config.label : col.header;
+            rowData[header] = cleanCells[idx] || "";
+          });
+
+          const trHtml = this.generateRowInnerHtml(colsConfig, rowData);
+          const tr = document.createElement("tr");
+          tr.className = "group hover:bg-blue-50/50 transition animate-fade-in";
+          tr.innerHTML = trHtml;
+          tbody.appendChild(tr);
+          this.attachRowListeners(tr);
+          addedCount++;
+        }
+      }
+
+      container.querySelector(".table-import-csv").value = "";
+      alert(`Se importaron ${addedCount} registros.`);
+    };
+    reader.readAsText(file);
   }
 
   extractValue(container) {
@@ -421,7 +676,6 @@ export class TableElement extends BaseElement {
       const rowData = {};
       tr.querySelectorAll("td[data-header]").forEach((td) => {
         const header = td.dataset.header;
-        // Buscamos el input oculto (real-value o url-storage)
         const input = td.querySelector(
           "input.real-value, textarea.real-value, select.real-value"
         );
@@ -441,6 +695,13 @@ export class TableElement extends BaseElement {
   renderPrint(config, value) {
     if (!value || value.length === 0) return "";
     const cols = config.columns || [];
+
+    let totals = {};
+    cols.forEach((c) => {
+      if (c.type === "number" || c.type === "currency")
+        totals[c.config?.label || c.header] = 0;
+    });
+
     const rowsHtml = value
       .map((row) => {
         const cells = cols
@@ -448,6 +709,12 @@ export class TableElement extends BaseElement {
             const elementStrategy = ElementRegistry.get(col.type);
             const header = col.config ? col.config.label : col.header;
             const cellConfig = col.config || { label: header };
+
+            if (col.type === "number" || col.type === "currency") {
+              const valNum = parseFloat(row[header]);
+              if (!isNaN(valNum)) totals[header] += valNum;
+            }
+
             const val = elementStrategy.renderPrint(
               cellConfig,
               row[header],
@@ -459,6 +726,33 @@ export class TableElement extends BaseElement {
         return `<tr>${cells}</tr>`;
       })
       .join("");
+
+    let footerHtml = "";
+    const hasTotals = Object.keys(totals).length > 0;
+
+    if (hasTotals) {
+      const footerCells = cols
+        .map((col, idx) => {
+          const header = col.config?.label || col.header;
+          const isNumeric = col.type === "number" || col.type === "currency";
+          const alignClass = isNumeric ? "text-right" : "";
+
+          if (col.type === "currency") {
+            const symbol = col.config?.symbol || "$";
+            return `<th class="border border-gray-300 p-2 bg-gray-100 ${alignClass}">${symbol} ${totals[
+              header
+            ].toLocaleString("es-ES", { minimumFractionDigits: 2 })}</th>`;
+          }
+          if (col.type === "number") {
+            return `<th class="border border-gray-300 p-2 bg-gray-100 ${alignClass}">${
+              parseFloat(totals[header].toFixed(4)) * 1
+            }</th>`;
+          }
+          return `<th class="border border-gray-300 p-2 bg-gray-100"></th>`;
+        })
+        .join("");
+      footerHtml = `<tfoot><tr>${footerCells}</tr></tfoot>`;
+    }
 
     return `
             <div class="mb-6 break-inside-avoid">
@@ -473,12 +767,19 @@ export class TableElement extends BaseElement {
                                 const header = c.config
                                   ? c.config.label
                                   : c.header;
-                                return `<th class="border border-gray-300 p-2 text-left font-bold">${header}</th>`;
+                                // ALINEACIÓN HEADER IMPRESIÓN
+                                const isNumeric =
+                                  c.type === "number" || c.type === "currency";
+                                const alignClass = isNumeric
+                                  ? "text-right"
+                                  : "text-left";
+                                return `<th class="border border-gray-300 p-2 font-bold ${alignClass}">${header}</th>`;
                               })
                               .join("")}
                         </tr>
                     </thead>
                     <tbody>${rowsHtml}</tbody>
+                    ${footerHtml}
                 </table>
             </div>`;
   }
