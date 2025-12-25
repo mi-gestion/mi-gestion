@@ -308,12 +308,11 @@ export class TableElement extends BaseElement {
         .join("");
       tfootHtml = `<tfoot><tr>${footerCells}<th class="border-t-2 border-gray-300 bg-gray-50"></th></tr></tfoot>`;
     }
-
     // Se agrega data-label para facilitar la exportación CSV con nombre correcto
     return `
             <div class="mb-8 table-container" data-cols="${colsConfigJson}" data-label="${
       config.label || "Tabla"
-    }">
+    }" id="container-${config.id}">
                 <div class="flex flex-wrap justify-between items-end mb-3 gap-2">
                     <label class="block text-sm font-bold text-blue-800 uppercase tracking-wide">
                         ${config.label}
@@ -563,8 +562,10 @@ export class TableElement extends BaseElement {
   }
 
   exportToCSV(container) {
+    container = document.getElementById(`container-${container.dataset.id}`);
     const colsConfig = JSON.parse(container.dataset.cols || "[]");
     const rows = Array.from(container.querySelectorAll("tbody tr"));
+    console.log(colsConfig);
 
     if (rows.length === 0) return alert("No hay datos para exportar.");
 
@@ -727,33 +728,6 @@ export class TableElement extends BaseElement {
       })
       .join("");
 
-    let footerHtml = "";
-    const hasTotals = Object.keys(totals).length > 0;
-
-    if (hasTotals) {
-      const footerCells = cols
-        .map((col, idx) => {
-          const header = col.config?.label || col.header;
-          const isNumeric = col.type === "number" || col.type === "currency";
-          const alignClass = isNumeric ? "text-right" : "";
-
-          if (col.type === "currency") {
-            const symbol = col.config?.symbol || "$";
-            return `<th class="border border-gray-300 p-2 bg-gray-100 ${alignClass}">${symbol} ${totals[
-              header
-            ].toLocaleString("es-ES", { minimumFractionDigits: 2 })}</th>`;
-          }
-          if (col.type === "number") {
-            return `<th class="border border-gray-300 p-2 bg-gray-100 ${alignClass}">${
-              parseFloat(totals[header].toFixed(4)) * 1
-            }</th>`;
-          }
-          return `<th class="border border-gray-300 p-2 bg-gray-100"></th>`;
-        })
-        .join("");
-      footerHtml = `<tfoot><tr>${footerCells}</tr></tfoot>`;
-    }
-
     return `
             <div class="mb-6 break-inside-avoid">
                 <h4 class="font-bold text-sm mb-2 uppercase border-l-4 border-blue-500 pl-2 text-gray-700">${
@@ -779,7 +753,6 @@ export class TableElement extends BaseElement {
                         </tr>
                     </thead>
                     <tbody>${rowsHtml}</tbody>
-                    ${footerHtml}
                 </table>
             </div>`;
   }
