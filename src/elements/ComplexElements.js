@@ -1,7 +1,7 @@
 import { BaseElement } from "./BaseElement.js";
 import { ElementRegistry } from "./ElementRegistry.js";
 
-// --- UTILIDADES GLOBALES PARA EL DISEÑADOR ---
+// --- UTILIDADES GLOBALES PARA EL DISEÑADOR (Mantenemos igual) ---
 window.TableDesignerUtils = {
   getColsFromDOM: (id) => {
     const container = document.getElementById(`cols-list-${id}`);
@@ -10,7 +10,6 @@ window.TableDesignerUtils = {
       const type = block.dataset.type;
       const strategy = ElementRegistry.get(type);
       const configArea = block.querySelector(".element-config-area");
-      // Sin validación: si strategy es null, esto explotará. Correcto.
       const config = strategy.extractConfig(configArea);
       return { type, config };
     });
@@ -22,12 +21,11 @@ window.TableDesignerUtils = {
     }
     return cols
       .map((col, idx) => {
-        // Sin validación: si col es null, explotará al acceder a col.type
         const strategy = ElementRegistry.get(col.type);
         const colId = `${id}-col-${idx}`;
         const innerTemplate = strategy.renderTemplate(
           colId,
-          col.config, // Pasamos config directo
+          col.config,
           "table"
         );
         return `
@@ -91,15 +89,12 @@ window.TableDesignerUtils = {
   },
 };
 
-// --- EDITOR MODAL (Sin validaciones defensivas) ---
+// --- EDITOR MODAL (Mantenemos igual) ---
 window.TableEditorUtils = {
   currentOnSave: null,
 
   openModal: (colsConfig, initialData, onSave, title = "Editar Item") => {
     window.TableEditorUtils.currentOnSave = onSave;
-
-    console.log("🛠️ [Modal] Data:", initialData);
-    console.log("🛠️ [Modal] Config:", colsConfig);
 
     const overlay = document.createElement("div");
     overlay.id = "table-editor-modal";
@@ -125,10 +120,7 @@ window.TableEditorUtils = {
     const tempState = { ...initialData };
 
     colsConfig.forEach((col, idx) => {
-      // Sin validación: Si col es undefined, esto explota.
       const strategy = ElementRegistry.get(col.type);
-
-      // Acceso directo a propiedades. Si col.config no existe, usamos fallback mínimo o explotará luego.
       const header = col.config ? col.config.label : col.header;
       const cellConfig = col.config || { label: header };
       const val = initialData[header] !== undefined ? initialData[header] : "";
@@ -159,13 +151,13 @@ window.TableEditorUtils = {
     overlay.querySelector("#modal-close-x").onclick = closeModal;
     overlay.querySelector("#modal-cancel-btn").onclick = closeModal;
     overlay.querySelector("#modal-save-btn").onclick = () => {
-      onSave(tempState); // Sin validación de tipo de función
+      onSave(tempState);
       closeModal();
     };
   },
 };
 
-// --- CLASE TABLE ELEMENT (Sin validaciones defensivas) ---
+// --- CLASE TABLE ELEMENT ---
 
 export class TableElement extends BaseElement {
   constructor() {
@@ -221,7 +213,6 @@ export class TableElement extends BaseElement {
     const base = super.extractConfig(c);
     const designerDiv = c.querySelector(".table-designer");
     const id = designerDiv.dataset.id;
-    // Esto explotará si getColsFromDOM falla. Correcto.
     const currentCols = window.TableDesignerUtils.getColsFromDOM(id);
     return {
       ...base,
@@ -232,19 +223,13 @@ export class TableElement extends BaseElement {
 
   // --- RENDERIZADO DEL EDITOR ---
   renderEditor(config, value = []) {
-    console.log(`🖼️ [TableElement] Render Config:`, config);
-    console.log(`🖼️ [TableElement] Render Value:`, value);
-
     const rows = Array.isArray(value) ? value : [];
-    const cols = config.columns; // Si config es null, explota aquí.
+    const cols = config.columns;
     const colsConfigJson = JSON.stringify(cols).replace(/"/g, "&quot;");
     const initialRowsJson = JSON.stringify(rows).replace(/"/g, "&quot;");
 
-    // Headers directos
     const headersHtml = cols
       .map((c, i) => {
-        // Acceso directo. Si c no tiene config, c.config.label explotará si c.config es undefined.
-        // Pero normalmente config existe aunque sea vacio. Si c es undefined, explota.
         const header = c.config ? c.config.label : c.header;
         const isNumeric = c.type === "number" || c.type === "currency";
         const alignClass = isNumeric ? "text-right" : "text-left";
@@ -252,7 +237,6 @@ export class TableElement extends BaseElement {
       })
       .join("");
 
-    // Footer
     let tfootHtml = "";
     if (cols.some((c) => c.type === "number" || c.type === "currency")) {
       const footerCells = cols
@@ -261,7 +245,6 @@ export class TableElement extends BaseElement {
             return `<th class="px-3 py-2 border-t-2 border-gray-300 bg-gray-50 text-left font-bold text-gray-600 uppercase text-[10px]">Totales</th>`;
           }
           if (c.type === "number" || c.type === "currency") {
-            // Acceso directo a c.config.symbol
             return `<th class="px-3 py-2 border-t-2 border-gray-300 bg-gray-50 text-right font-bold text-blue-800 text-sm js-total-col" data-col-index="${idx}" data-type="${
               c.type
             }" data-symbol="${c.config ? c.config.symbol : ""}">-</th>`;
@@ -282,13 +265,18 @@ export class TableElement extends BaseElement {
                 <label class="block text-sm font-bold text-blue-800 uppercase tracking-wide">${
                   config.label
                 }</label>
+                
                 <div class="flex items-center gap-2 flex-wrap">
+                    
                     <div class="table-search-box hidden opacity-0 transition-all duration-300 relative">
-                         <input type="text" placeholder="Buscar..." class="pl-7 pr-2 py-1 border rounded-lg text-xs w-48 focus:w-64 outline-none bg-white">
+                         <input type="text" placeholder="Buscar..." class="pl-7 pr-2 py-1 border rounded-lg text-xs w-48 focus:w-64 outline-none bg-white focus:ring-2 focus:ring-blue-200">
                          <span class="absolute left-2 top-1.5 text-gray-400 text-xs">🔍</span>
                     </div>
+                    
                     <span class="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full js-row-counter">0 items</span>
+                    
                     <div class="h-4 w-px bg-gray-300 mx-1"></div>
+                    
                     <label class="cursor-pointer text-gray-500 hover:text-green-600 transition" title="Importar CSV">
                         <span class="text-lg">📥</span>
                         <input type="file" accept=".csv" class="hidden js-import-csv">
@@ -321,90 +309,130 @@ export class TableElement extends BaseElement {
 
   // --- LÓGICA DE CONTROL ---
   attachListeners(container, onChange) {
-    // CORRECCIÓN: Buscamos el elemento real que tiene la configuración
-    // El 'container' que llega es el wrapper del EditManager, no la tabla en sí.
     const tableContainer = container.querySelector(".table-container");
+    if (!tableContainer) return; // Protección básica
 
-    // Protección: Si por alguna razón no se renderizó bien
-    if (!tableContainer) {
-      console.error(
-        "❌ [TableElement] No se encontró .table-container dentro del wrapper."
-      );
-      return;
-    }
-
-    // Ahora leemos del elemento correcto
-    // Si dataset.cols está mal formado, JSON.parse lanzará error (comportamiento deseado)
     const colsConfig = JSON.parse(tableContainer.dataset.cols);
     const rows = JSON.parse(tableContainer.dataset.initialValue);
 
-    console.log("⚡ [TableElement] Listeners Attached. Cols:", colsConfig);
-
-    // Usamos tableContainer como referencia para buscar los elementos internos
     const tbody = tableContainer.querySelector(".js-table-body");
     const emptyState = tableContainer.querySelector(".js-empty-state");
     const counter = tableContainer.querySelector(".js-row-counter");
     const totalCells = tableContainer.querySelectorAll(".js-total-col");
 
+    // Elementos del buscador
+    const searchBox = tableContainer.querySelector(".table-search-box");
+    const searchInput = tableContainer.querySelector(".table-search-box input");
+
+    // Función para renderizar filas (y controlar visibilidad buscador)
     const renderTableRows = () => {
       tbody.innerHTML = "";
+
+      // 1. CONTROL VISIBILIDAD BUSCADOR (> 10 items)
+      if (rows.length > 10) {
+        searchBox.classList.remove("hidden", "opacity-0");
+      } else {
+        // Si hay texto escrito, no lo ocultamos de golpe para no molestar
+        if (!searchInput.value) {
+          searchBox.classList.add("hidden", "opacity-0");
+        }
+      }
 
       if (rows.length === 0) {
         emptyState.classList.remove("hidden");
         emptyState.textContent = "No hay registros.";
+        updateTotals([]); // Reset totales
       } else {
         emptyState.classList.add("hidden");
 
-        rows.forEach((rowData, idx) => {
-          const tr = document.createElement("tr");
-          tr.className = "group hover:bg-blue-50/50 transition animate-fade-in";
-
-          const cellsHtml = colsConfig
-            .map((col) => {
-              const strategy = ElementRegistry.get(col.type);
-              const header = col.config ? col.config.label : col.header;
-              const val = rowData[header];
-              const safeConfig = col.config || { label: header };
-
-              const displayHtml = strategy.renderPrint(
-                safeConfig,
-                val,
-                "table"
-              );
-              return `<td class="p-2 border-b align-middle bg-white text-sm text-gray-700">${displayHtml}</td>`;
-            })
-            .join("");
-
-          const actionsHtml = `
-                    <td class="p-1 border-b text-center align-middle whitespace-nowrap">
-                        <div class="flex items-center justify-center gap-1">
-                             <button type="button" class="text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition js-btn-up" title="Subir">↑</button>
-                            <button type="button" class="text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition js-btn-down" title="Bajar">↓</button>
-                            <div class="w-px h-4 bg-gray-200 mx-1"></div>
-                            <button type="button" class="text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition js-btn-edit" title="Editar">✏️</button>
-                            <button type="button" class="text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition js-btn-del" title="Eliminar">🗑️</button>
-                        </div>
-                    </td>
-                `;
-
-          tr.innerHTML = cellsHtml + actionsHtml;
-          tbody.appendChild(tr);
-
-          tr.querySelector(".js-btn-del").onclick = () =>
-            actions.deleteRow(idx);
-          tr.querySelector(".js-btn-edit").onclick = () => actions.editRow(idx);
-          tr.querySelector(".js-btn-up").onclick = () =>
-            actions.moveRow(idx, -1);
-          tr.querySelector(".js-btn-down").onclick = () =>
-            actions.moveRow(idx, 1);
-        });
+        // Si hay búsqueda activa, reaplicarla para pintar lo correcto
+        if (searchInput && searchInput.value) {
+          applySearch(searchInput.value);
+        } else {
+          // Pintado normal de todas las filas
+          rows.forEach((rowData, idx) => createRowDOM(rowData, idx));
+          updateTotals(rows); // Sumar todo
+        }
       }
-
       counter.textContent = `${rows.length} items`;
-      updateTotals();
     };
 
-    const updateTotals = () => {
+    // Helper para crear el TR y sus listeners
+    const createRowDOM = (rowData, idx) => {
+      const tr = document.createElement("tr");
+      tr.className = "group hover:bg-blue-50/50 transition animate-fade-in";
+
+      const cellsHtml = colsConfig
+        .map((col) => {
+          const strategy = ElementRegistry.get(col.type);
+          const header = col.config ? col.config.label : col.header;
+          const val = rowData[header];
+          const safeConfig = col.config || { label: header };
+
+          const displayHtml = strategy.renderPrint(safeConfig, val, "table");
+          return `<td class="p-2 border-b align-middle bg-white text-sm text-gray-700">${displayHtml}</td>`;
+        })
+        .join("");
+
+      const actionsHtml = `
+            <td class="p-1 border-b text-center align-middle whitespace-nowrap">
+                <div class="flex items-center justify-center gap-1">
+                     <button type="button" class="text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition js-btn-up" title="Subir">↑</button>
+                    <button type="button" class="text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition js-btn-down" title="Bajar">↓</button>
+                    <div class="w-px h-4 bg-gray-200 mx-1"></div>
+                    <button type="button" class="text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition js-btn-edit" title="Editar">✏️</button>
+                    <button type="button" class="text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition js-btn-del" title="Eliminar">🗑️</button>
+                </div>
+            </td>
+        `;
+
+      tr.innerHTML = cellsHtml + actionsHtml;
+      tbody.appendChild(tr);
+
+      // Listeners de acción
+      tr.querySelector(".js-btn-del").onclick = () => actions.deleteRow(idx);
+      tr.querySelector(".js-btn-edit").onclick = () => actions.editRow(idx);
+      tr.querySelector(".js-btn-up").onclick = () => actions.moveRow(idx, -1);
+      tr.querySelector(".js-btn-down").onclick = () => actions.moveRow(idx, 1);
+    };
+
+    // 2. LÓGICA DE BÚSQUEDA (AND + Filtro)
+    const applySearch = (term) => {
+      const terms = term.toLowerCase().split(/\s+/).filter(Boolean); // Separar palabras
+      const visibleRowsData = [];
+
+      // Limpiamos tbody para repintar ordenadamente solo lo visible
+      // (Podríamos usar display:none, pero repintar asegura consistencia de índices visuales si se necesitara)
+      // Mantenemos la lógica de display:none para rendimiento si son muchos items,
+      // pero aquí iteramos rows (datos) y generamos DOM.
+
+      tbody.innerHTML = "";
+
+      rows.forEach((row, idx) => {
+        const text = Object.values(row).join(" ").toLowerCase();
+
+        // Lógica AND: Debe contener TODOS los términos
+        const matches =
+          terms.length === 0 || terms.every((t) => text.includes(t));
+
+        if (matches) {
+          createRowDOM(row, idx); // Crear fila visible
+          visibleRowsData.push(row);
+        }
+      });
+
+      if (visibleRowsData.length === 0 && rows.length > 0) {
+        emptyState.textContent = "Sin coincidencias.";
+        emptyState.classList.remove("hidden");
+      } else {
+        emptyState.classList.add("hidden");
+      }
+
+      // 3. TOTALES SOBRE VISIBLES
+      updateTotals(visibleRowsData);
+    };
+
+    const updateTotals = (dataRows) => {
       totalCells.forEach((cell) => {
         const colIdx = parseInt(cell.dataset.colIndex);
         const colConfig = colsConfig[colIdx];
@@ -414,7 +442,7 @@ export class TableElement extends BaseElement {
           ? colConfig.config.label
           : colConfig.header;
 
-        const sum = rows.reduce((acc, row) => {
+        const sum = dataRows.reduce((acc, row) => {
           const val = parseFloat(row[header]);
           return acc + (isNaN(val) ? 0 : val);
         }, 0);
@@ -539,13 +567,13 @@ export class TableElement extends BaseElement {
 
     renderTableRows();
 
-    // Actualizamos los listeners para buscar dentro de tableContainer, no container
-    const addBtn = tableContainer.querySelector(".js-add-row-btn");
-    if (addBtn) addBtn.onclick = actions.addRow;
+    // Listeners del DOM
+    if (tableContainer.querySelector(".js-add-row-btn")) {
+      tableContainer.querySelector(".js-add-row-btn").onclick = actions.addRow;
+    }
 
-    const importInput = tableContainer.querySelector(".js-import-csv");
-    if (importInput) {
-      importInput.onchange = (e) => {
+    if (tableContainer.querySelector(".js-import-csv")) {
+      tableContainer.querySelector(".js-import-csv").onchange = (e) => {
         if (e.target.files[0]) {
           actions.importCSV(e.target.files[0]);
           e.target.value = "";
@@ -553,30 +581,25 @@ export class TableElement extends BaseElement {
       };
     }
 
-    const exportBtn = tableContainer.querySelector(".js-export-csv");
-    if (exportBtn) exportBtn.onclick = actions.exportCSV;
+    if (tableContainer.querySelector(".js-export-csv")) {
+      tableContainer.querySelector(".js-export-csv").onclick =
+        actions.exportCSV;
+    }
 
-    const searchInput = tableContainer.querySelector(".table-search-box input");
     if (searchInput) {
       searchInput.addEventListener("input", (e) => {
-        const term = e.target.value.toLowerCase();
-        const trs = tbody.querySelectorAll("tr");
-        trs.forEach((tr, i) => {
-          const text = Object.values(rows[i]).join(" ").toLowerCase();
-          tr.style.display = text.includes(term) ? "" : "none";
-        });
+        applySearch(e.target.value);
       });
     }
   }
 
-  // extractValue Legacy - Devolvemos array vacio ya que EditManager usa el estado.
   extractValue(container) {
     return [];
   }
 
   renderPrint(config, value) {
     if (!value || value.length === 0) return "";
-    const cols = config.columns; // Si no hay columns, explota.
+    const cols = config.columns;
 
     let totals = {};
     cols.forEach((c) => {
